@@ -245,7 +245,8 @@ async def clipboard_set(text: str) -> dict:
     """Set the VM clipboard (syncs to the Mac clipboard too)."""
     if guard.contains_secret(text):
         return {"error": "blocked", "detail": "looks like a card number or secret"}
-    r = await get_executor().run("xclip -i -selection clipboard", timeout=10, stdin=text.encode())
+    # xclip stays alive to serve the selection; detach its output so we don't wait on it.
+    r = await get_executor().run("xclip -i -selection clipboard >/dev/null 2>&1", timeout=10, stdin=text.encode())
     return {"ok": r.code == 0}
 
 
