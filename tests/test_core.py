@@ -117,12 +117,14 @@ async def test_xdotool_commands(monkeypatch):
 
     monkeypatch.setattr(desktop, "get_executor", lambda: Fake())
     await desktop.click(5, 6, "right_click")
-    await desktop.type_text("héllo 'x'")
+    await desktop.type_text("hello 'x'")
+    await desktop.type_text("你好")
     await desktop.scroll(1, 2, "up", 2)
     assert await desktop.cursor_position() == (10, 20)
     assert scripts[0] == "xdotool mousemove --sync 5 6 click --repeat 1 --delay 80 3"
-    assert scripts[1] == "xdotool type --delay 8 -- 'héllo '\"'\"'x'\"'\"''"
-    assert "click --repeat 2 --delay 30 4" in scripts[2]
+    assert scripts[1] == "xdotool type --delay 8 -- 'hello '\"'\"'x'\"'\"''"
+    assert "xclip -i" in scripts[2] and "ctrl+v" in scripts[2]  # non-ASCII is pasted
+    assert "click --repeat 2 --delay 30 4" in scripts[3]
 
 
 def test_lima_executor_argv(monkeypatch):

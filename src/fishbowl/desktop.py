@@ -65,7 +65,15 @@ async def drag(x1: int, y1: int, x2: int, y2: int) -> None:
 
 
 async def type_text(text: str) -> None:
-    # Chunk so very long strings don't hit argv limits; xdotool handles unicode.
+    if not text.isascii():
+        # xdotool drops characters missing from the X keymap (é, 中文…); paste them instead.
+        r = await get_executor().run(
+            "xclip -i -selection clipboard >/dev/null 2>&1 && sleep 0.1 && xdotool key --clearmodifiers ctrl+v",
+            timeout=30, stdin=text.encode())
+        if r.code != 0:
+            raise DesktopError(r.err.strip() or f"paste failed ({r.code})")
+        return
+    # Chunk so very long strings don't hit argv limits.
     for i in range(0, len(text), 200):
         await _xdo(f"xdotool type --delay 8 -- {q(text[i:i + 200])}", timeout=120)
 
