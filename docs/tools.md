@@ -40,12 +40,12 @@ Run a bash command inside the VM (cwd /workspace, DISPLAY=:1). Only /workspace i
 
 ### `clipboard_get`
 
-Read the VM clipboard (it is kept in sync with the Mac clipboard).
+Read the VM clipboard. What the agent copies reaches the Mac; the Mac clipboard only reaches the VM while the human controls the screen (handoff or Pause), and is cleared when control returns.
 
 
 ### `clipboard_set`
 
-Set the VM clipboard (syncs to the Mac clipboard too).
+Set the VM clipboard (it also appears on the Mac clipboard).
 
 | param | type | default |
 |---|---|---|
@@ -92,7 +92,7 @@ The visible text of the working tab (url, title, text).
 
 ### `browser_elements`
 
-Interactive elements as a table: [id] role "name" value=… checked=…, plus screen coordinates for `computer`. Use the ids with browser_click / browser_type / browser_select.
+Interactive elements as a table: [id] role "name" value=… checked=…, plus screen coordinates for `computer` (measured with a real pointer move). Use the ids with browser_click / browser_type / browser_select. Coordinates are only valid until the page changes; call this again after any action that alters the layout.
 
 | param | type | default |
 |---|---|---|

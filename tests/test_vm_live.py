@@ -56,6 +56,8 @@ async def test_pixel_click_and_unicode_typing(live_vm):
     await server.computer(action="left_click", x=x, y=y, screenshot_after=False)
     await server.browser_wait(quiet_ms=300)
     assert "Newsletter enabled" in (await server.browser_read())["text"]
+    # The new text pushed the search box down: coordinates are only valid until the page changes.
+    els = await server.browser_elements()
     x, y = els["screen_xy"][rows["Search"]]
     await server.computer(action="left_click", x=x, y=y, screenshot_after=False)
     await asyncio.sleep(0.5)  # QEMU guests are slower to move focus

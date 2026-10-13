@@ -344,8 +344,9 @@ async def browser_read(max_chars: int = 20000) -> dict:
 
 @tool
 async def browser_elements(only_in_viewport: bool = False) -> dict:
-    """Interactive elements as a table: [id] role "name" value=… checked=…, plus screen coordinates for `computer`.
-    Use the ids with browser_click / browser_type / browser_select."""
+    """Interactive elements as a table: [id] role "name" value=… checked=…, plus screen coordinates for `computer`
+    (measured with a real pointer move). Use the ids with browser_click / browser_type / browser_select.
+    Coordinates are only valid until the page changes; call this again after any action that alters the layout."""
     b = get_browser()
     meta, els = await b.elements()
     if only_in_viewport:
