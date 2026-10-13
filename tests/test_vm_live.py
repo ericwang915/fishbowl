@@ -60,7 +60,23 @@ async def test_pixel_click_and_unicode_typing(live_vm):
     await server.computer(action="left_click", x=x, y=y, screenshot_after=False)
     await asyncio.sleep(0.5)  # QEMU guests are slower to move focus
     focused = await server._browser.eval("document.activeElement && document.activeElement.id")
-    assert focused == "q", f"pixel click did not focus the search box (focused: {focused!r})"
+    if focused != "q":
+        b = server._browser
+        off = b._offset_cache
+        mouse = (await server.shell(command="xdotool getmouselocation"))["stdout"].strip()
+        hit = await b.eval(
+            f"(() => {{ const e = document.elementFromPoint({x - off[1][0]}, {y - off[1][1]}); "
+            "return e ? e.outerHTML.slice(0, 120) : null; })()"
+        )
+        rect = await b.eval("JSON.stringify(document.getElementById('q').getBoundingClientRect())")
+        win = await server.shell(command="xdotool search --class chromium getwindowgeometry %@ 2>&1 | head -20")
+        img = await server.computer(action="screenshot")
+        Path(os.environ.get("FISHBOWL_ARTIFACTS", "/tmp")).joinpath("pixel-click.png").write_bytes(img.data)
+        pytest.fail(
+            f"pixel click did not focus the search box (focused: {focused!r})\n"
+            f"clicked screen ({x}, {y}); window key + offset {off}; pointer now: {mouse}\n"
+            f"element at that point: {hit}\ninput rect: {rect}\nwindows: {win['stdout']}"
+        )
     await server.computer(action="type", text="héllo 你好", screenshot_after=False)
     await asyncio.sleep(0.3)
     value = await server._browser.eval("document.getElementById('q').value")

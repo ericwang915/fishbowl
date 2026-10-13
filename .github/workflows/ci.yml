@@ -75,9 +75,15 @@ jobs:
       - run: fishbowl up
         timeout-minutes: 30
       - run: fishbowl doctor
-      - run: pytest -q tests/test_vm_live.py
+      - run: mkdir -p artifacts && pytest -q tests/test_vm_live.py
         env:
           FISHBOWL_VM_LIVE: "1"
+          FISHBOWL_ARTIFACTS: artifacts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: vm-screenshots
+          path: artifacts/
       - name: Logs on failure
         if: failure()
         run: |
