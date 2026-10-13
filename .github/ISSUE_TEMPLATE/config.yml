@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/ericwang915/fishbowl/discussions
+    about: Ask and share in Discussions
+  - name: Security issue
+    url: https://github.com/ericwang915/fishbowl/security/advisories/new
+    about: Report privately

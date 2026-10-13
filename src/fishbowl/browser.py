@@ -64,8 +64,15 @@ class BrowserController:
     # ---------- tabs ----------
     async def tabs(self) -> list[dict[str, Any]]:
         pages = await self.browser.pages()
-        return [{"id": p["id"], "title": p.get("title", ""), "url": p.get("url", ""),
-                 "working": p["id"] == self.working_tab} for p in pages]
+        return [
+            {
+                "id": p["id"],
+                "title": p.get("title", ""),
+                "url": p.get("url", ""),
+                "working": p["id"] == self.working_tab,
+            }
+            for p in pages
+        ]
 
     async def page(self) -> Session:
         pages = await self.browser.pages()
@@ -162,8 +169,12 @@ class BrowserController:
         s = await self.page()
         x, y = loc["x"], loc["y"]
         await s.send("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x, "y": y})
-        await s.send("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1})
-        await s.send("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1})
+        await s.send(
+            "Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1}
+        )
+        await s.send(
+            "Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1}
+        )
         return {"ok": True, "x": x, "y": y}
 
     async def type(self, element_id: int, text: str, clear: bool = True, submit: bool = False) -> dict:
@@ -194,7 +205,10 @@ class BrowserController:
         if txt:
             down["text"] = txt
         await s.send("Input.dispatchKeyEvent", down)
-        await s.send("Input.dispatchKeyEvent", {"type": "keyUp", "key": key, "code": key, "windowsVirtualKeyCode": vk, "nativeVirtualKeyCode": vk})
+        await s.send(
+            "Input.dispatchKeyEvent",
+            {"type": "keyUp", "key": key, "code": key, "windowsVirtualKeyCode": vk, "nativeVirtualKeyCode": vk},
+        )
 
     async def scroll(self, direction: str = "down", amount: float = 0.8) -> dict:
         s = await self.page()

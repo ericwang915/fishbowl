@@ -1,18 +1,16 @@
 """Audit log, control/viewer server, clipboard sync, desktop helpers, MCP server wiring."""
 
 import asyncio
-import json
 import os
 import time
 
 import httpx
-import pytest
 
 from fishbowl import audit, clipboard, control, desktop, server
 from fishbowl.config import get_config
 
-
 # ----------------------------------------------------------------- audit
+
 
 def test_audit_log_and_redaction():
     audit.log("browser_type", {"element": 3, "text": "sk-ant-api03-" + "x" * 40})
@@ -23,7 +21,6 @@ def test_audit_log_and_redaction():
 
 
 def test_screenshot_retention():
-    cfg = get_config()
     old = audit.save_screenshot(b"\x89PNG old")
     os.utime(old, (time.time() - 8 * 86400,) * 2)
     new = audit.save_screenshot(b"\x89PNG new")
@@ -31,6 +28,7 @@ def test_screenshot_retention():
 
 
 # ----------------------------------------------------------------- control
+
 
 def test_pause_and_viewer_server():
     assert control.ensure_server()
@@ -85,6 +83,7 @@ async def test_handoff_timeout(monkeypatch):
 
 # ----------------------------------------------------------------- clipboard
 
+
 def test_clipboard_two_way(monkeypatch):
     mac = {"v": "hello from mac"}
     monkeypatch.setattr(clipboard, "_mac_get", lambda: mac["v"])
@@ -100,6 +99,7 @@ def test_clipboard_two_way(monkeypatch):
 
 # ----------------------------------------------------------------- desktop
 
+
 def test_key_normalization():
     assert desktop.normalize_key("enter") == "Return"
     assert desktop.normalize_key("cmd+L") == "ctrl+L"
@@ -113,6 +113,7 @@ async def test_xdotool_commands(monkeypatch):
         async def run(self, script, timeout=60, stdin=None):
             scripts.append(script)
             from fishbowl.executor import Result
+
             return Result(0, b"X=10\nY=20\n", b"")
 
     monkeypatch.setattr(desktop, "get_executor", lambda: Fake())
@@ -129,13 +130,16 @@ async def test_xdotool_commands(monkeypatch):
 
 def test_lima_executor_argv(monkeypatch):
     from fishbowl.executor import LimaExecutor
+
     argv = LimaExecutor().argv("ls")
     assert argv[:2] == ["limactl", "shell"] and "/workspace" in argv and argv[-1].endswith("ls")
 
 
 def test_lima_template_isolation():
-    import yaml
     from importlib import resources
+
+    import yaml
+
     t = yaml.safe_load(resources.files("fishbowl").joinpath("lima.yaml").read_text())
     assert [m["location"] for m in t["mounts"]] == ["~/vc/workspace"]
     fwd = [p for p in t["portForwards"] if not p.get("ignore")]
@@ -146,11 +150,12 @@ def test_lima_template_isolation():
 
 # ----------------------------------------------------------------- server
 
+
 async def test_twenty_five_tools():
     tools = await server.mcp.list_tools()
     assert len(tools) == 25
     for t in tools:
-        props = (getattr(t, "input_schema", None) or getattr(t, "inputSchema"))["properties"]
+        props = (getattr(t, "input_schema", None) or t.inputSchema)["properties"]
         assert "ctx" not in props
 
 
@@ -183,12 +188,13 @@ async def test_every_call_is_audited():
 
 async def test_browser_tools_end_to_end(chrome, page_server, monkeypatch):
     from fishbowl.browser import BrowserController
+
     monkeypatch.setattr(server, "_browser", BrowserController(chrome))
     monkeypatch.setenv("FISHBOWL_GUARD", "heuristic")
     await server.browser_tab(action="new")
     await server.browser_open(url=f"{page_server}/checkout.html")
     els = await server.browser_elements()
-    btn = next(int(l[1:l.index("]")]) for l in els["table"].splitlines() if "Place order" in l)
+    btn = next(int(l[1 : l.index("]")]) for l in els["table"].splitlines() if "Place order" in l)
     r = await server.browser_click(element=btn)
     assert r["status"] == "needs_approval"
     r = await server.browser_click(element=btn, approved=True)

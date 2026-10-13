@@ -15,11 +15,15 @@ from .browser import BrowserController
 PLACEHOLDER = re.compile(
     r"^\s*(thinking|analy[sz]ing|searching|typing|generating|loading|processing|working on it|one moment|"
     r"please wait|sedang\b.*|mengetik|memproses|正在.*|思考中|输入中|加载中|请稍候|稍等)\s*[.…·]*\s*$"
-    r"|^\s*[.…·•]{1,6}\s*$", re.I)
+    r"|^\s*[.…·•]{1,6}\s*$",
+    re.I,
+)
 
 SURVEY = re.compile(
     r"(rate (?:this|our|your)|how (?:satisfied|would you rate|did we do)|was this (?:helpful|useful)|"
-    r"satisfaction|feedback|thumbs|👍|👎|⭐|★|满意|评价|评分|有帮助吗|puas|penilaian|beri nilai|nilai kami)", re.I)
+    r"satisfaction|feedback|thumbs|👍|👎|⭐|★|满意|评价|评分|有帮助吗|puas|penilaian|beri nilai|nilai kami)",
+    re.I,
+)
 
 FIND_INPUT = r"""
 (() => {
@@ -72,7 +76,7 @@ def extract_reply(before: str, after: str, message: str) -> str:
     lines = after.splitlines()
     # Find the last line containing our message, take everything after it.
     idx = max((i for i, l in enumerate(lines) if key and key in _norm(l)), default=-1)
-    tail = lines[idx + 1:] if idx >= 0 else lines
+    tail = lines[idx + 1 :] if idx >= 0 else lines
     chrome = set(l.strip() for l in before.splitlines()[-30:] if l.strip())
     out = [l.strip() for l in tail if l.strip() and l.strip() not in chrome and not PLACEHOLDER.match(l)]
     return "\n".join(out).strip()
@@ -89,8 +93,14 @@ def classify(reply: str, sent: bool, had_placeholder: bool) -> str:
     return "answered"
 
 
-async def chat_ask(b: BrowserController, message: str, input_selector: str | None = None,
-                   send_selector: str | None = None, timeout_s: float = 60, stable_s: float = 2.5) -> dict[str, Any]:
+async def chat_ask(
+    b: BrowserController,
+    message: str,
+    input_selector: str | None = None,
+    send_selector: str | None = None,
+    timeout_s: float = 60,
+    stable_s: float = 2.5,
+) -> dict[str, Any]:
     if guard.contains_secret(message):
         return {"label": "blocked", "reply": "", "reason": "message contains a card number or secret"}
     t0 = time.time()
@@ -119,8 +129,12 @@ async def chat_ask(b: BrowserController, message: str, input_selector: str | Non
             await b.click(btn)
             sent = await _wait_for(lambda t: _count(t, message) > n_before, b, 4.0)
     if not sent:
-        return {"label": "send_failed", "reply": "", "reason": "message never appeared in the conversation",
-                "secs": round(time.time() - t0, 2)}
+        return {
+            "label": "send_failed",
+            "reply": "",
+            "reason": "message never appeared in the conversation",
+            "secs": round(time.time() - t0, 2),
+        }
     t_sent = time.time()
 
     # 2) wait for the reply to settle, ignoring placeholder text
@@ -161,16 +175,38 @@ async def _wait_for(pred, b: BrowserController, secs: float) -> bool:
 JUDGE_SCHEMA = {
     "type": "object",
     "properties": {
-        "reply_type": {"type": "string", "enum": ["answer", "clarifying_question", "refusal", "handoff_to_human",
-                                                   "survey_only", "error_message", "irrelevant", "no_reply"]},
+        "reply_type": {
+            "type": "string",
+            "enum": [
+                "answer",
+                "clarifying_question",
+                "refusal",
+                "handoff_to_human",
+                "survey_only",
+                "error_message",
+                "irrelevant",
+                "no_reply",
+            ],
+        },
         "detected_language": {"type": "string"},
         "language_match": {"type": "boolean"},
         "actionable": {"type": "boolean", "description": "could the customer follow it to solve their problem"},
-        "cites_store_data": {"type": "boolean", "description": "mentions concrete store facts: order, product, price, policy, stock, hours"},
+        "cites_store_data": {
+            "type": "boolean",
+            "description": "mentions concrete store facts: order, product, price, policy, stock, hours",
+        },
         "score": {"type": "integer", "minimum": 1, "maximum": 5},
         "issues": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["reply_type", "detected_language", "language_match", "actionable", "cites_store_data", "score", "issues"],
+    "required": [
+        "reply_type",
+        "detected_language",
+        "language_match",
+        "actionable",
+        "cites_store_data",
+        "score",
+        "issues",
+    ],
 }
 
 JUDGE_SYSTEM = """You grade a customer-service chatbot reply. Be strict and literal.
@@ -181,14 +217,35 @@ JUDGE_SYSTEM = """You grade a customer-service chatbot reply. Be strict and lite
 - score: 1 (useless) .. 5 (excellent). List concrete issues."""
 
 
-async def judge_reply(question: str, reply: str, label: str | None = None, expected_language: str | None = None,
-                      store_context: str | None = None) -> dict[str, Any]:
+async def judge_reply(
+    question: str,
+    reply: str,
+    label: str | None = None,
+    expected_language: str | None = None,
+    store_context: str | None = None,
+) -> dict[str, Any]:
     if label in ("no_reply", "send_failed", "placeholder_stuck", "blocked") or not reply.strip():
-        return {"reply_type": "no_reply", "detected_language": "", "language_match": False, "actionable": False,
-                "cites_store_data": False, "score": 1, "issues": [f"no reply ({label or 'empty'})"], "source": "rule"}
+        return {
+            "reply_type": "no_reply",
+            "detected_language": "",
+            "language_match": False,
+            "actionable": False,
+            "cites_store_data": False,
+            "score": 1,
+            "issues": [f"no reply ({label or 'empty'})"],
+            "source": "rule",
+        }
     if label == "survey_only":
-        return {"reply_type": "survey_only", "detected_language": "", "language_match": False, "actionable": False,
-                "cites_store_data": False, "score": 1, "issues": ["bot only showed a satisfaction survey"], "source": "rule"}
+        return {
+            "reply_type": "survey_only",
+            "detected_language": "",
+            "language_match": False,
+            "actionable": False,
+            "cites_store_data": False,
+            "score": 1,
+            "issues": ["bot only showed a satisfaction survey"],
+            "source": "rule",
+        }
     prompt = f"QUESTION:\n{question}\n\nREPLY:\n{reply[:6000]}"
     if expected_language:
         prompt += f"\n\nEXPECTED LANGUAGE: {expected_language}"

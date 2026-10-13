@@ -17,8 +17,9 @@ import asyncio
 import hashlib
 import re
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from . import audit, control, guard, llm
 from .browser import BrowserController, Element, element_table
@@ -62,7 +63,9 @@ the page URL/title, and the text that newly appeared after the action. Answer do
 
 LOGIN_WALL = re.compile(
     r"(sign in to continue|log in to continue|please (?:sign|log) in|verify you are human|i'm not a robot|captcha|"
-    r"登录后|请先登录|请登录|验证码|silakan masuk|masuk untuk melanjutkan)", re.I)
+    r"登录后|请先登录|请登录|验证码|silakan masuk|masuk untuk melanjutkan)",
+    re.I,
+)
 
 Approver = Callable[[str], Awaitable[bool]]
 
@@ -73,7 +76,7 @@ class Step:
     text: str | None = None  # the ONLY text this step may type
 
     @classmethod
-    def parse(cls, raw: Any) -> "Step":
+    def parse(cls, raw: Any) -> Step:
         if isinstance(raw, str):
             return cls(goal=raw)
         return cls(goal=str(raw.get("goal") or raw.get("step") or ""), text=raw.get("text"))
@@ -110,8 +113,14 @@ def _new_text(before: str, after: str, limit: int = 1500) -> str:
 
 
 class Runner:
-    def __init__(self, browser: BrowserController, approver: Approver | None = None,
-                 allow: list[str] | None = None, max_no_change: int = 3, min_confidence: float = 0.45):
+    def __init__(
+        self,
+        browser: BrowserController,
+        approver: Approver | None = None,
+        allow: list[str] | None = None,
+        max_no_change: int = 3,
+        min_confidence: float = 0.45,
+    ):
         self.b = browser
         self.approver = approver
         self.allow = allow or []
@@ -128,7 +137,9 @@ class Runner:
             pinned = self.b.working_tab
             for i, step in enumerate(steps):
                 if step.text and guard.contains_secret(step.text):
-                    return self._end(res, t0, "handback", f"step {i + 1} text contains a card number or secret; refusing to type it")
+                    return self._end(
+                        res, t0, "handback", f"step {i + 1} text contains a card number or secret; refusing to type it"
+                    )
                 outcome = await self._run_step(i, step, res, t0, timeout_s, max_actions_per_step, pinned)
                 if outcome is not None:
                     return outcome
@@ -159,23 +170,33 @@ class Runner:
             text = (await self.b.text(8000))["text"]
             res.url = meta.get("url", "")
             if LOGIN_WALL.search(text[:3000]) and not any(
-                    w in step.goal.lower() for w in ("log in", "login", "sign in", "登录", "masuk")):
+                w in step.goal.lower() for w in ("log in", "login", "sign in", "登录", "masuk")
+            ):
                 return self._end(res, t0, "handback", "login wall or captcha — needs a human (use handoff)")
 
             overlays = await self.b.overlays()
             ov = ""
             if overlays:
                 ov = "\nOVERLAYS covering the page:\n" + "\n".join(
-                    f"- {o['kind']} {int(o['cover'] * 100)}%: {o['text'][:120]!r} dismiss={o['dismiss']}" for o in overlays)
+                    f"- {o['kind']} {int(o['cover'] * 100)}%: {o['text'][:120]!r} dismiss={o['dismiss']}"
+                    for o in overlays
+                )
 
-            prompt = (f"STEP {i + 1}/{res.total_steps}: {step.goal}\n"
-                      f"Prepared text for this step: {'(none)' if step.text is None else repr(step.text)}\n"
-                      f"URL: {meta.get('url')}  TITLE: {meta.get('title')}  scroll {meta.get('scrollY')}/{meta.get('scrollMax')}\n"
-                      f"Previous actions this step: {history[-5:] or 'none'}{ov}\n\nELEMENTS:\n{element_table(els)}")
+            prompt = (
+                f"STEP {i + 1}/{res.total_steps}: {step.goal}\n"
+                f"Prepared text for this step: {'(none)' if step.text is None else repr(step.text)}\n"
+                f"URL: {meta.get('url')}  TITLE: {meta.get('title')}  scroll {meta.get('scrollY')}/{meta.get('scrollMax')}\n"
+                f"Previous actions this step: {history[-5:] or 'none'}{ov}\n\nELEMENTS:\n{element_table(els)}"
+            )
             d = await llm.decide("decide", DECIDE_SYSTEM, prompt, DECIDE_SCHEMA)
             action, eid = d.get("action"), int(d.get("element") or 0)
-            entry = {"step": i + 1, "action": action, "element": eid, "reason": d.get("reason", ""),
-                     "confidence": d.get("confidence")}
+            entry = {
+                "step": i + 1,
+                "action": action,
+                "element": eid,
+                "reason": d.get("reason", ""),
+                "confidence": d.get("confidence"),
+            }
             res.log.append(entry)
             audit.log("browser_run.decide", entry)
 
@@ -184,7 +205,9 @@ class Runner:
             if action == "handback":
                 return self._end(res, t0, "handback", d.get("reason") or "model handed back")
             if float(d.get("confidence") or 0) < self.min_confidence:
-                return self._end(res, t0, "handback", f"not confident enough ({d.get('confidence')}): {d.get('reason', '')}")
+                return self._end(
+                    res, t0, "handback", f"not confident enough ({d.get('confidence')}): {d.get('reason', '')}"
+                )
 
             before = _fingerprint(meta, els, text)
             tabs_before = {t["id"] for t in await self.b.tabs()}
@@ -212,11 +235,14 @@ class Runner:
             if action in ("scroll_down", "scroll_up", "wait"):
                 continue
             check = await llm.decide(
-                "check", CHECK_SYSTEM,
+                "check",
+                CHECK_SYSTEM,
                 f"STEP GOAL: {step.goal}\nACTION TAKEN: {last_action}\nURL: {meta2.get('url')}  TITLE: {meta2.get('title')}\n"
                 f"NEW TEXT SINCE ACTION:\n{_new_text(text, text2) or '(none)'}"
                 + "".join(f"\n[a new tab opened: {t['title'] or t['url']}]" for t in opened),
-                CHECK_SCHEMA, max_tokens=150)
+                CHECK_SCHEMA,
+                max_tokens=150,
+            )
             res.log.append({"step": i + 1, "check": check.get("done"), "reason": check.get("reason", "")})
             if check.get("done"):
                 return None
@@ -233,7 +259,9 @@ class Runner:
                 ok = await self.approver(f"{commit} on {target.line()} — {v.reason}") if self.approver else False
                 audit.log("guard", {"action": commit, "target": target.line(), "reason": v.reason, "approved": ok})
                 if not ok:
-                    return self._end(res, t0, "needs_approval", f"{commit} on {target.name!r} needs your approval: {v.reason}")
+                    return self._end(
+                        res, t0, "needs_approval", f"{commit} on {target.name!r} needs your approval: {v.reason}"
+                    )
         if action == "click":
             r = await self.b.click(target.id)
             return r["ok"]

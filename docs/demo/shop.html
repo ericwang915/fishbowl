@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Acme Store</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #1f2328; background: #f6f8fa; }
+  header { display: flex; align-items: center; gap: 24px; padding: 14px 32px; background: #fff; border-bottom: 1px solid #d0d7de; }
+  .logo { font-weight: 800; font-size: 20px; color: #0969da; }
+  form { flex: 1; display: flex; gap: 8px; max-width: 560px; }
+  input[type=search] { flex: 1; padding: 10px 14px; border: 1px solid #d0d7de; border-radius: 8px; font-size: 15px; }
+  button { padding: 10px 18px; border: 0; border-radius: 8px; background: #0969da; color: #fff; font-weight: 600; font-size: 15px; cursor: pointer; }
+  button.secondary { background: #eaeef2; color: #1f2328; }
+  button.buy { background: #1a7f37; }
+  .cart { margin-left: auto; color: #57606a; }
+  main { padding: 28px 32px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { background: #fff; border: 1px solid #d0d7de; border-radius: 12px; padding: 16px; }
+  .img { height: 120px; border-radius: 8px; background: linear-gradient(135deg, #ddf4ff, #b6e3ff); display: flex; align-items: center; justify-content: center; font-size: 44px; }
+  .price { font-weight: 700; color: #1a7f37; }
+  a { color: #0969da; text-decoration: none; font-weight: 600; }
+  .hero { background: #fff; border: 1px solid #d0d7de; border-radius: 12px; padding: 40px; text-align: center; color: #57606a; }
+  .product { display: grid; grid-template-columns: 340px 1fr; gap: 32px; background: #fff; border: 1px solid #d0d7de; border-radius: 12px; padding: 28px; }
+  .product .img { height: 260px; font-size: 90px; }
+  #cookie { position: fixed; inset: 0; background: rgba(15, 23, 42, .55); display: flex; align-items: flex-end; justify-content: center; }
+  #cookie .box { background: #fff; margin: 32px; padding: 20px 24px; border-radius: 12px; display: flex; gap: 16px; align-items: center; max-width: 760px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  .ok { color: #1a7f37; font-weight: 600; }
+</style></head>
+<body>
+<header>
+  <div class="logo">◆ Acme</div>
+  <form onsubmit="event.preventDefault(); search(document.getElementById('q').value)">
+    <input id="q" type="search" placeholder="Search products" aria-label="Search products">
+    <button>Search</button>
+  </form>
+  <div class="cart" id="cart">Cart (0)</div>
+</header>
+<main id="main"><div class="hero"><h2>Spring sale</h2>Everything for your desk, up to 30% off.</div></main>
+<div id="cookie"><div class="box">🍪 We use cookies to improve your experience.
+  <button class="secondary" onclick="document.getElementById('cookie').remove()">Reject</button>
+  <button onclick="document.getElementById('cookie').remove()">Accept all</button></div></div>
+<script>
+const items = [
+  ["🔌", "USB-C Hub Pro", "$49.00", "7-in-1: HDMI 4K, 100W PD, SD card"],
+  ["🧲", "USB-C Hub Mini", "$29.00", "4-in-1, aluminium"],
+  ["🖥️", "USB-C Dock Max", "$129.00", "Dual 4K, Ethernet, 12 ports"],
+];
+function search(q) {
+  document.getElementById('main').innerHTML = `<p>Results for <b>${q}</b></p><div class="grid">` + items.map((it, i) =>
+    `<div class="card"><div class="img">${it[0]}</div><p><a href="#" onclick="product(${i});return false">${it[1]}</a></p><div class="price">${it[2]}</div></div>`).join('') + '</div>';
+}
+function product(i) {
+  const it = items[i];
+  document.getElementById('main').innerHTML = `<div class="product"><div class="img">${it[0]}</div><div><h2>${it[1]}</h2>
+    <p>${it[3]}</p><p class="price">${it[2]}</p><button onclick="addToCart(${i})">Add to cart</button><p id="msg"></p></div></div>`;
+}
+function addToCart(i) {
+  document.getElementById('cart').textContent = 'Cart (1)';
+  document.getElementById('msg').innerHTML = '<span class="ok">✓ Added to cart</span> &nbsp; <button class="buy" onclick="this.textContent=\'Order placed\'">Place order — ' + items[i][2] + '</button>';
+}
+</script>
+</body></html>

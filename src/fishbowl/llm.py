@@ -16,8 +16,9 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 import httpx
 
@@ -40,11 +41,11 @@ class LLMSettings:
     model: str
     base_url: str
     api_key: str | None
-    price_in: float | None   # USD per 1M input tokens
+    price_in: float | None  # USD per 1M input tokens
     price_out: float | None  # USD per 1M output tokens
 
     @classmethod
-    def from_env(cls) -> "LLMSettings":
+    def from_env(cls) -> LLMSettings:
         provider = os.environ.get("FISHBOWL_LLM", "").lower()
         if not provider:
             if os.environ.get("ANTHROPIC_API_KEY"):
@@ -55,15 +56,21 @@ class LLMSettings:
                 provider = "ollama"
         if provider not in DEFAULT_MODELS:
             raise LLMError(f"unknown FISHBOWL_LLM={provider!r} (use anthropic, openai or ollama)")
-        base = os.environ.get("FISHBOWL_LLM_BASE_URL") or {
-            "anthropic": "https://api.anthropic.com",
-            "openai": os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-            "ollama": os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434"),
-        }[provider]
+        base = (
+            os.environ.get("FISHBOWL_LLM_BASE_URL")
+            or {
+                "anthropic": "https://api.anthropic.com",
+                "openai": os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+                "ollama": os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434"),
+            }[provider]
+        )
         if provider == "ollama" and "://" not in base:
             base = "http://" + base
-        key = {"anthropic": os.environ.get("ANTHROPIC_API_KEY"),
-               "openai": os.environ.get("OPENAI_API_KEY"), "ollama": None}[provider]
+        key = {
+            "anthropic": os.environ.get("ANTHROPIC_API_KEY"),
+            "openai": os.environ.get("OPENAI_API_KEY"),
+            "ollama": None,
+        }[provider]
         p_in, p_out = os.environ.get("FISHBOWL_PRICE_IN"), os.environ.get("FISHBOWL_PRICE_OUT")
         return cls(
             provider=provider,
@@ -89,14 +96,17 @@ async def _anthropic(s: LLMSettings, system: str, user: str, schema: dict, max_t
     if not s.api_key:
         raise LLMError("ANTHROPIC_API_KEY is not set")
     body = {
-        "model": s.model, "max_tokens": max_tokens, "system": system,
+        "model": s.model,
+        "max_tokens": max_tokens,
+        "system": system,
         "messages": [{"role": "user", "content": user}],
         "tools": [{"name": "answer", "description": "Return the decision.", "input_schema": schema}],
         "tool_choice": {"type": "tool", "name": "answer"},
     }
     async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.post(f"{s.base_url}/v1/messages", json=body,
-                         headers={"x-api-key": s.api_key, "anthropic-version": "2023-06-01"})
+        r = await c.post(
+            f"{s.base_url}/v1/messages", json=body, headers={"x-api-key": s.api_key, "anthropic-version": "2023-06-01"}
+        )
     if r.status_code >= 400:
         raise LLMError(f"anthropic {r.status_code}: {r.text[:300]}")
     d = r.json()
@@ -110,8 +120,13 @@ async def _anthropic(s: LLMSettings, system: str, user: str, schema: dict, max_t
 async def _openai(s: LLMSettings, system: str, user: str, schema: dict, max_tokens: int):
     headers = {"Authorization": f"Bearer {s.api_key}"} if s.api_key else {}
     msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-    body = {"model": s.model, "messages": msgs, "max_tokens": max_tokens, "temperature": 0,
-            "response_format": {"type": "json_schema", "json_schema": {"name": "answer", "schema": schema}}}
+    body = {
+        "model": s.model,
+        "messages": msgs,
+        "max_tokens": max_tokens,
+        "temperature": 0,
+        "response_format": {"type": "json_schema", "json_schema": {"name": "answer", "schema": schema}},
+    }
     async with httpx.AsyncClient(timeout=60) as c:
         r = await c.post(f"{s.base_url}/chat/completions", json=body, headers=headers)
         if r.status_code == 400 and "response_format" in r.text:
@@ -127,9 +142,14 @@ async def _openai(s: LLMSettings, system: str, user: str, schema: dict, max_toke
 
 
 async def _ollama(s: LLMSettings, system: str, user: str, schema: dict, max_tokens: int):
-    body = {"model": s.model, "stream": False, "format": schema, "think": False,
-            "options": {"temperature": 0, "num_predict": max_tokens},
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    body = {
+        "model": s.model,
+        "stream": False,
+        "format": schema,
+        "think": False,
+        "options": {"temperature": 0, "num_predict": max_tokens},
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+    }
     try:
         async with httpx.AsyncClient(timeout=120) as c:
             r = await c.post(f"{s.base_url}/api/chat", json=body)
@@ -148,7 +168,7 @@ def _parse_json(text: str) -> dict:
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end < 0:
         raise LLMError(f"model did not return JSON: {text[:200]}")
-    return json.loads(text[start:end + 1])
+    return json.loads(text[start : end + 1])
 
 
 _PROVIDERS = {"anthropic": _anthropic, "openai": _openai, "ollama": _ollama}
@@ -181,8 +201,17 @@ def _record(purpose, provider, model, tin, tout, secs, s: LLMSettings | None, er
     cost = None
     if s and s.price_in is not None and s.price_out is not None:
         cost = (tin * s.price_in + tout * s.price_out) / 1e6
-    row = {"ts": time.time(), "purpose": purpose, "provider": provider, "model": model,
-           "in": tin, "out": tout, "secs": round(secs, 3), "cost": cost, "error": error}
+    row = {
+        "ts": time.time(),
+        "purpose": purpose,
+        "provider": provider,
+        "model": model,
+        "in": tin,
+        "out": tout,
+        "secs": round(secs, 3),
+        "cost": cost,
+        "error": error,
+    }
     with _stats_path().open("a") as f:
         f.write(json.dumps(row) + "\n")
 
@@ -216,6 +245,8 @@ def stats(since_hours: float | None = None) -> dict:
         "output_tokens": sum(r["out"] for r in rows),
         "avg_latency_s": round(sum(r["secs"] for r in rows) / len(rows), 2) if rows else 0,
         "cost_usd": round(total_cost, 4) if priced else None,
-        "cost_note": None if priced else "set FISHBOWL_PRICE_IN / FISHBOWL_PRICE_OUT (USD per 1M tokens) to track spend",
+        "cost_note": None
+        if priced
+        else "set FISHBOWL_PRICE_IN / FISHBOWL_PRICE_OUT (USD per 1M tokens) to track spend",
         "by_purpose": {k: {**v, "secs": round(v["secs"], 2), "cost": round(v["cost"], 4)} for k, v in by.items()},
     }

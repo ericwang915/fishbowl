@@ -55,9 +55,15 @@ async def test_anthropic(monkeypatch, mock_http):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
     monkeypatch.setenv("FISHBOWL_PRICE_IN", "1")
     monkeypatch.setenv("FISHBOWL_PRICE_OUT", "5")
-    calls = mock_http(lambda r: httpx.Response(200, json={
-        "content": [{"type": "tool_use", "name": "answer", "input": {"ok": True}}],
-        "usage": {"input_tokens": 1000, "output_tokens": 200}}))
+    calls = mock_http(
+        lambda r: httpx.Response(
+            200,
+            json={
+                "content": [{"type": "tool_use", "name": "answer", "input": {"ok": True}}],
+                "usage": {"input_tokens": 1000, "output_tokens": 200},
+            },
+        )
+    )
     out = await llm.decide("decide", "sys", "user", SCHEMA)
     assert out == {"ok": True}
     body = json.loads(calls[0].content)
@@ -77,8 +83,13 @@ async def test_openai_compatible_with_fallback(monkeypatch, mock_http):
         body = json.loads(r.content)
         if body["response_format"]["type"] == "json_schema":
             return httpx.Response(400, text="response_format json_schema not supported")
-        return httpx.Response(200, json={"choices": [{"message": {"content": '```json\n{"ok": false}\n```'}}],
-                                         "usage": {"prompt_tokens": 5, "completion_tokens": 3}})
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '```json\n{"ok": false}\n```'}}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+            },
+        )
 
     calls = mock_http(handler)
     out = await llm.decide("check", "sys", "user", SCHEMA)
@@ -90,8 +101,11 @@ async def test_openai_compatible_with_fallback(monkeypatch, mock_http):
 async def test_ollama(monkeypatch, mock_http):
     monkeypatch.setenv("FISHBOWL_LLM", "ollama")
     monkeypatch.setenv("FISHBOWL_MODEL", "llama3.2")
-    calls = mock_http(lambda r: httpx.Response(200, json={
-        "message": {"content": '{"ok": true}'}, "prompt_eval_count": 50, "eval_count": 7}))
+    calls = mock_http(
+        lambda r: httpx.Response(
+            200, json={"message": {"content": '{"ok": true}'}, "prompt_eval_count": 50, "eval_count": 7}
+        )
+    )
     out = await llm.decide("judge", "sys", "user", SCHEMA)
     assert out == {"ok": True}
     body = json.loads(calls[0].content)

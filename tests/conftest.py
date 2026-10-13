@@ -20,8 +20,10 @@ CHROME_CANDIDATES = [
     os.environ.get("CHROME_BIN", ""),
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    shutil.which("google-chrome") or "", shutil.which("google-chrome-stable") or "",
-    shutil.which("chromium") or "", shutil.which("chromium-browser") or "",
+    shutil.which("google-chrome") or "",
+    shutil.which("google-chrome-stable") or "",
+    shutil.which("chromium") or "",
+    shutil.which("chromium-browser") or "",
 ]
 
 
@@ -35,8 +37,7 @@ def _free_port() -> int:
 def fishbowl_home(tmp_path, monkeypatch):
     for k in ("FISHBOWL_LLM", "FISHBOWL_MODEL", "FISHBOWL_GUARD", "FISHBOWL_PRICE_IN", "FISHBOWL_PRICE_OUT"):
         monkeypatch.delenv(k, raising=False)
-    cfg = config.Config(home=tmp_path / "vc", executor="local", auto_open_viewer=False,
-                        control_port=_free_port())
+    cfg = config.Config(home=tmp_path / "vc", executor="local", auto_open_viewer=False, control_port=_free_port())
     config.set_config(cfg)
     cfg.ensure_dirs()
     yield cfg
@@ -47,6 +48,7 @@ def fishbowl_home(tmp_path, monkeypatch):
 @pytest.fixture(scope="session")
 def page_server():
     port = _free_port()
+
     class Quiet(http.server.SimpleHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -65,11 +67,23 @@ def chrome():
         pytest.skip("Chrome/Chromium not found (set CHROME_BIN)")
     port = _free_port()
     profile = tempfile.mkdtemp(prefix="fishbowl-chrome-")
-    proc = subprocess.Popen([
-        exe, "--headless=new", f"--remote-debugging-port={port}", f"--user-data-dir={profile}",
-        "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--window-size=1280,800",
-        "--disable-popup-blocking", "--no-sandbox", "about:blank",
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(
+        [
+            exe,
+            "--headless=new",
+            f"--remote-debugging-port={port}",
+            f"--user-data-dir={profile}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-gpu",
+            "--window-size=1280,800",
+            "--disable-popup-blocking",
+            "--no-sandbox",
+            "about:blank",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     url = f"http://127.0.0.1:{port}"
     for _ in range(100):
         try:

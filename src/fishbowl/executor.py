@@ -50,8 +50,15 @@ class LimaExecutor(Executor):
     def argv(self, script: str) -> list[str]:
         cfg = get_config()
         return [
-            "limactl", "shell", "--workdir", "/workspace", cfg.vm_name,
-            "--", "bash", "-lc", f"export DISPLAY=:1; {script}",
+            "limactl",
+            "shell",
+            "--workdir",
+            "/workspace",
+            cfg.vm_name,
+            "--",
+            "bash",
+            "-lc",
+            f"export DISPLAY=:1; {script}",
         ]
 
 

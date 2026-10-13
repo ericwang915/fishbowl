@@ -13,6 +13,18 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 env = {**os.environ, "FISHBOWL_LIVE": "1"}
-rc = subprocess.call([sys.executable, "-m", "pytest", "-q", "-k", "test_task_suite", "--durations=5",
-                      str(root / "tests" / "test_browser_run.py")], env=env, cwd=root)
+rc = subprocess.call(
+    [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-q",
+        "-k",
+        "test_task_suite",
+        "--durations=5",
+        str(root / "tests" / "test_browser_run.py"),
+    ],
+    env=env,
+    cwd=root,
+)
 sys.exit(rc)

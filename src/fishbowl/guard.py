@@ -60,17 +60,69 @@ def contains_secret(text: str) -> bool:
 
 _RISKY_WORDS = [
     # en
-    r"pay", r"payment", r"purchase", r"buy now", r"buy", r"checkout", r"check out", r"place order", r"order now",
-    r"subscribe", r"donate", r"transfer", r"withdraw", r"send", r"submit", r"post", r"publish", r"tweet", r"reply",
-    r"delete", r"remove", r"erase", r"destroy", r"cancel (?:my )?(?:subscription|account|order)", r"close account",
-    r"confirm", r"approve", r"sign", r"book now", r"reserve", r"invite", r"share", r"merge", r"deploy", r"unsubscribe",
+    r"pay",
+    r"payment",
+    r"purchase",
+    r"buy now",
+    r"buy",
+    r"checkout",
+    r"check out",
+    r"place order",
+    r"order now",
+    r"subscribe",
+    r"donate",
+    r"transfer",
+    r"withdraw",
+    r"send",
+    r"submit",
+    r"post",
+    r"publish",
+    r"tweet",
+    r"reply",
+    r"delete",
+    r"remove",
+    r"erase",
+    r"destroy",
+    r"cancel (?:my )?(?:subscription|account|order)",
+    r"close account",
+    r"confirm",
+    r"approve",
+    r"sign",
+    r"book now",
+    r"reserve",
+    r"invite",
+    r"share",
+    r"merge",
+    r"deploy",
+    r"unsubscribe",
     # zh
-    r"付款", r"支付", r"购买", r"下单", r"结算", r"发送", r"提交", r"发布", r"删除", r"移除", r"确认", r"转账", r"订阅", r"注销",
+    r"付款",
+    r"支付",
+    r"购买",
+    r"下单",
+    r"结算",
+    r"发送",
+    r"提交",
+    r"发布",
+    r"删除",
+    r"移除",
+    r"确认",
+    r"转账",
+    r"订阅",
+    r"注销",
     # id / ms
-    r"bayar", r"beli", r"kirim", r"hapus", r"pesan sekarang", r"konfirmasi",
+    r"bayar",
+    r"beli",
+    r"kirim",
+    r"hapus",
+    r"pesan sekarang",
+    r"konfirmasi",
 ]
 _RISKY_RE = re.compile(r"(?<![a-z])(?:" + "|".join(_RISKY_WORDS) + r")(?![a-z])", re.I)
-_SAFE_HINTS = re.compile(r"(?<![a-z])(search|搜索|cari|filter|sort|next|previous|back|more|show|view|open|menu|close|cancel|dismiss|learn more)(?![a-z])", re.I)
+_SAFE_HINTS = re.compile(
+    r"(?<![a-z])(search|搜索|cari|filter|sort|next|previous|back|more|show|view|open|menu|close|cancel|dismiss|learn more)(?![a-z])",
+    re.I,
+)
 
 
 @dataclass
@@ -94,8 +146,20 @@ GUARD_SCHEMA = {
     "type": "object",
     "properties": {
         "needs_approval": {"type": "boolean"},
-        "category": {"type": "string", "enum": ["payment", "send_message", "delete", "submit_form", "publish",
-                                                 "account_change", "navigation", "input", "other_safe"]},
+        "category": {
+            "type": "string",
+            "enum": [
+                "payment",
+                "send_message",
+                "delete",
+                "submit_form",
+                "publish",
+                "account_change",
+                "navigation",
+                "input",
+                "other_safe",
+            ],
+        },
         "reason": {"type": "string"},
     },
     "required": ["needs_approval", "category", "reason"],
@@ -114,8 +178,10 @@ async def assess(action: str, target: str, context: str = "", allowed: list[str]
     if action not in ("click", "enter", "submit"):
         return Verdict(False, "not a commit action", "heuristic")
     allowed = allowed or []
-    prompt = (f"Action: {action}\nTarget element: {target}\nPage context: {context[:1500]}\n"
-              f"Categories the user pre-approved: {allowed or 'none'}")
+    prompt = (
+        f"Action: {action}\nTarget element: {target}\nPage context: {context[:1500]}\n"
+        f"Categories the user pre-approved: {allowed or 'none'}"
+    )
     try:
         r = await llm.decide("guard", GUARD_SYSTEM, prompt, GUARD_SCHEMA, max_tokens=200)
         needs = bool(r.get("needs_approval")) and r.get("category") not in allowed
