@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from fishbowl import config, hostos, install, vm
-from fishbowl.executor import LimaExecutor, WSLExecutor, get_executor
+from fishbowl.executor import LimaExecutor, WSLExecutor, bash_exe, get_executor
 
 
 @pytest.fixture
@@ -82,6 +82,7 @@ def test_lima_up_on_intel_mac_uses_qemu(host, monkeypatch, fishbowl_home):
     assert b.up() == 0
     cmd = calls[0]
     assert cmd[:4] == ["/usr/local/bin/limactl", "start", "--name", "fishbowl"] and "--vm-type=qemu" in cmd
+    assert "--mount-type=reverse-sshfs" in cmd
     rendered = yaml.safe_load(open(cmd[-1]).read())
     assert "xvfb" in rendered["provision"][0]["script"] and "fishbowl-chromium" in rendered["provision"][1]["script"]
 
@@ -94,7 +95,7 @@ def test_lima_up_on_apple_silicon_uses_default_vz(host, monkeypatch, fishbowl_ho
     monkeypatch.setattr(b, "status", lambda: "absent")
     calls = []
     monkeypatch.setattr(vm.subprocess, "call", lambda cmd: calls.append(cmd) or 0)
-    assert b.up() == 0 and not any(c.startswith("--vm-type") for c in calls[0])
+    assert b.up() == 0 and not any(c.startswith(("--vm-type", "--mount-type")) for c in calls[0])  # vz + virtiofs
 
 
 def test_template_has_both_cpu_images():
@@ -102,7 +103,7 @@ def test_template_has_both_cpu_images():
     assert {i["arch"] for i in t["images"]} == {"aarch64", "x86_64"}
 
 
-@pytest.mark.skipif(not shutil.which("bash"), reason="needs bash")
+@pytest.mark.skipif(not shutil.which(bash_exe()), reason="needs bash")
 @pytest.mark.parametrize("which", ["lima-system", "lima-desktop", "wsl-setup", "wsl-provision"])
 def test_provisioning_scripts_parse(which, tmp_path):
     t = yaml.safe_load(vm.lima_template())
@@ -114,7 +115,7 @@ def test_provisioning_scripts_parse(which, tmp_path):
     }[which]
     f = tmp_path / "s.sh"
     f.write_text(script)
-    r = subprocess.run(["bash", "-n", str(f)], capture_output=True, text=True)
+    r = subprocess.run([bash_exe(), "-n", str(f)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
 
 

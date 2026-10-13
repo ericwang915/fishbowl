@@ -82,6 +82,9 @@ jobs:
         if: failure()
         run: |
           tail -n 80 ~/.lima/fishbowl/ha.stderr.log || true
+          limactl list || true
+          limactl shell fishbowl -- findmnt || true
+          limactl shell fishbowl -- ls -la /workspace || true
           limactl shell fishbowl -- sudo journalctl -u 'fishbowl-*' --no-pager -n 120 || true
 
   desktop:

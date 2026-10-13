@@ -56,7 +56,8 @@ def decide(state: dict, q: dict) -> dict:
             return answer("DONE")
         return answer("SELECT", select_target=key)
     if g.startswith("wait"):
-        if _pick(click, target):
+        hit = _pick(click, target)
+        if hit and "(offscreen)" not in click[hit]:  # the verifier only trusts what is on screen
             return answer("DONE")
         return answer("SCROLL_DOWN" if "SCROLL_DOWN" in ops else "WAIT")
     if target:

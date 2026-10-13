@@ -3,6 +3,7 @@
 Runs only with FISHBOWL_VM_LIVE=1. Pages are data: URLs because the VM cannot reach the host's 127.0.0.1.
 """
 
+import asyncio
 import os
 import socket
 import struct
@@ -56,7 +57,13 @@ async def test_pixel_click_and_unicode_typing(live_vm):
     assert "Newsletter enabled" in (await server.browser_read())["text"]
     x, y = els["screen_xy"][rows["Search"]]
     await server.computer(action="left_click", x=x, y=y, screenshot_after=False)
+    await asyncio.sleep(0.5)  # QEMU guests are slower to move focus
+    focused = await server._browser.eval("document.activeElement && document.activeElement.id")
+    assert focused == "q", f"pixel click did not focus the search box (focused: {focused!r})"
     await server.computer(action="type", text="héllo 你好", screenshot_after=False)
+    await asyncio.sleep(0.3)
+    value = await server._browser.eval("document.getElementById('q').value")
+    assert value == "héllo 你好", f"typed value was {value!r}"
     await server.computer(action="key", key="enter", screenshot_after=False)
     await server.browser_wait(quiet_ms=300)
     assert "Results for héllo 你好" in (await server.browser_read())["text"]

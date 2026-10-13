@@ -114,6 +114,15 @@ class LimaBackend(Backend):
             return "qemu"
         return None  # Lima's default: vz on Apple Silicon, qemu (+KVM) on Linux
 
+    def mount_type(self, vm_type: str | None) -> str | None:
+        forced = os.environ.get("FISHBOWL_MOUNT_TYPE")
+        if forced:
+            return forced
+        # QEMU's default (9p) needs kernel modules Debian's cloud kernel lacks; sshfs works everywhere.
+        if vm_type == "qemu" or (vm_type is None and hostos.kind() == "linux"):
+            return "reverse-sshfs"
+        return None  # vz: virtiofs
+
     def up(self) -> int:
         cfg = get_config()
         cfg.ensure_dirs()
@@ -139,6 +148,8 @@ class LimaBackend(Backend):
         cmd = [exe, "start", "--name", cfg.vm_name, "--tty=false"]
         if vm_type:
             cmd.append(f"--vm-type={vm_type}")
+        if mount := self.mount_type(vm_type):
+            cmd.append(f"--mount-type={mount}")
         return subprocess.call(cmd + [str(path)])
 
     def down(self) -> int:

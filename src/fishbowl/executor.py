@@ -96,9 +96,24 @@ class WSLExecutor(Executor):
         ]
 
 
+def bash_exe() -> str:
+    """A real bash. On Windows, PATH's bash.exe is often the WSL launcher in System32; prefer Git Bash."""
+    import os
+    import shutil
+    import sys
+
+    if sys.platform != "win32":
+        return "bash"
+    for p in (r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files\Git\usr\bin\bash.exe"):
+        if os.path.exists(p):
+            return p
+    found = shutil.which("bash")
+    return found if found and "system32" not in found.lower() else "bash"
+
+
 class LocalExecutor(Executor):
     def argv(self, script: str) -> list[str]:
-        return ["bash", "-lc", f"export DISPLAY=${{DISPLAY:-:1}}; {script}"]
+        return [bash_exe(), "-lc", f"export DISPLAY=${{DISPLAY:-:1}}; {script}"]
 
 
 def get_executor() -> Executor:

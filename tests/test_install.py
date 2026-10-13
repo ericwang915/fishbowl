@@ -12,6 +12,8 @@ tomllib = pytest.importorskip("tomllib")  # Python 3.11+
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     monkeypatch.setattr(install.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     return tmp_path
 
 
@@ -64,12 +66,9 @@ def test_codex_fresh_config(home):
     assert data["mcp_servers"]["fishbowl"]["startup_timeout_sec"] == 30
 
 
-@pytest.mark.parametrize("client,path", [
-    ("claude-desktop", "Library/Application Support/Claude/claude_desktop_config.json"),
-    ("cursor", ".cursor/mcp.json"),
-])  # fmt: skip
-def test_json_clients_merge(home, client, path):
-    cfg = home / path
+@pytest.mark.parametrize("client", ["claude-desktop", "cursor"])
+def test_json_clients_merge(home, client):
+    cfg = install.claude_desktop_config() if client == "claude-desktop" else install.cursor_config()
     cfg.parent.mkdir(parents=True)
     cfg.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}, "theme": "dark"}))
     install.install(client)
@@ -108,4 +107,4 @@ def test_claude_code_uses_cli(home, monkeypatch):
 
 def test_server_command_is_absolute():
     cmd = install.server_command()
-    assert cmd[0].startswith("/") and cmd[-1] == "mcp"
+    assert install.Path(cmd[0]).is_absolute() and cmd[-1] == "mcp"

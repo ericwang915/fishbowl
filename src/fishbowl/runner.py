@@ -298,6 +298,8 @@ class Runner:
             record = {"action": desc, "page_changed": changed}
             if opened:
                 record["note"] = f"site opened a new tab ({opened[0]['url'][:60]}); staying on the working tab"
+                if self.b.working_tab:
+                    await self.b.browser.activate(self.b.working_tab)  # background tabs get throttled
             if not outcome:
                 record["result"] = "failed: element moved or covered"
             history.append(record)

@@ -11,6 +11,7 @@ for i in $(seq 1 50); do xdpyinfo -display :1 >/dev/null 2>&1 && break; sleep 0.
 openbox >/tmp/openbox.log 2>&1 &
 sleep 0.5
 "$CHROME" --no-first-run --no-default-browser-check --disable-dev-shm-usage --no-sandbox --test-type \
+  --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding \
   --remote-debugging-port=9222 --window-position=0,0 --window-size=1280,800 --start-maximized \
   --user-data-dir=/tmp/fishbowl-chrome about:blank >/tmp/chrome.log 2>&1 &
 for i in $(seq 1 100); do curl -sf http://127.0.0.1:9222/json/version >/dev/null && echo "desktop up" && exit 0; sleep 0.2; done
