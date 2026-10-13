@@ -186,6 +186,31 @@ class BrowserController:
         s = await self.page()
         return await s.evaluate(dom_js.FRESH % int(element_id))
 
+    async def screen_offset(self, move_mouse) -> tuple[int, int] | None:
+        """Exact screen position of the viewport's top-left corner, measured with a real mouse move.
+
+        `move_mouse(x, y)` moves the pointer on the VM screen (xdotool). Cached until the window moves
+        or resizes. Returns None when the pointer can't be driven (e.g. no desktop)."""
+        key = await self.eval(dom_js.WINDOW_KEY)
+        cached = getattr(self, "_offset_cache", None)
+        if cached and cached[0] == key:
+            return cached[1]
+        await self.eval(dom_js.CALIBRATE_ARM)
+        # A point well inside the viewport: middle of the window, lower half.
+        x = int(key[0] + key[2] / 2)
+        y = int(key[1] + key[3] - key[5] / 2)
+        try:
+            for dx in (1, 0):
+                await move_mouse(x + dx, y + dx)
+        except Exception:
+            return None
+        got = await self.eval(dom_js.CALIBRATE_READ)
+        if not got:
+            return None
+        offset = (x - round(got[0]), y - round(got[1]))
+        self._offset_cache = (key, offset)
+        return offset
+
     def cdp_calls(self) -> int:
         return sum(s.calls for s in self.browser._sessions.values())
 

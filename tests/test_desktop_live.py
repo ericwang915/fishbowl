@@ -37,6 +37,7 @@ async def test_screenshot_is_1280x800(live):
 async def test_pixel_click_lands_on_element(live):
     await server.browser_open(url=f"{live}/checkbox.html")
     els = await server.browser_elements()
+    assert els["calibrated"]
     line = next(l for l in els["table"].splitlines() if "Newsletter" in l)
     eid = int(line[1 : line.index("]")])
     x, y = els["screen_xy"][eid]

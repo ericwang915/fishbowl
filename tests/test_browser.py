@@ -121,3 +121,30 @@ async def test_back(browser, page_server):
     await browser.navigate(f"{page_server}/select.html")
     r = await browser.back()
     assert r["title"] == "Signup"
+
+
+async def test_screen_offset_is_measured_not_guessed(browser, page_server):
+    """Simulate a window manager that puts the viewport at (7, 93) on screen: the measurement must find it."""
+    await browser.navigate(f"{page_server}/form.html")
+    true_offset = (7, 93)
+    moves = []
+
+    async def move(x, y):  # what xdotool would do: the page sees the pointer at screen − offset
+        moves.append((x, y))
+        s = await browser.page()
+        await s.send(
+            "Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x - true_offset[0], "y": y - true_offset[1]}
+        )
+
+    assert await browser.screen_offset(move) == true_offset
+    n = len(moves)
+    assert await browser.screen_offset(move) == true_offset and len(moves) == n  # cached until the window changes
+
+
+async def test_screen_offset_without_a_desktop(browser, page_server):
+    await browser.navigate(f"{page_server}/form.html")
+
+    async def no_desktop(x, y):
+        raise RuntimeError("xdotool: command not found")
+
+    assert await browser.screen_offset(no_desktop) is None

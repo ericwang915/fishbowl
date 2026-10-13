@@ -50,6 +50,7 @@ async def test_screenshot_is_1280x800(live_vm):
 async def test_pixel_click_and_unicode_typing(live_vm):
     await server.browser_open(url=data_url(CHECKBOX))
     els = await server.browser_elements()
+    assert els["calibrated"], "screen coordinates must be measured with a real mouse move"
     rows = {l.split('"')[1] if '"' in l else l: int(l[1 : l.index("]")]) for l in els["table"].splitlines()}
     x, y = els["screen_xy"][rows["Newsletter"]]
     await server.computer(action="left_click", x=x, y=y, screenshot_after=False)

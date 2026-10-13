@@ -245,3 +245,14 @@ FRESH = r"""
   return { fresh: true };
 })(%d)
 """
+
+# Viewport → screen calibration: the page records where a real (xdotool) mouse move landed in client
+# coordinates. Screen position minus client position is the exact viewport origin on screen, whatever
+# the window manager's frames or Chrome's own idea of its window position.
+CALIBRATE_ARM = r"""
+(() => { window.__fbCal = null;
+  addEventListener('mousemove', e => { window.__fbCal = [e.clientX, e.clientY]; }, { capture: true });
+  return [screenX, screenY, outerWidth, outerHeight, innerWidth, innerHeight, devicePixelRatio]; })()
+"""
+CALIBRATE_READ = "window.__fbCal"
+WINDOW_KEY = "[screenX, screenY, outerWidth, outerHeight, innerWidth, innerHeight, devicePixelRatio]"

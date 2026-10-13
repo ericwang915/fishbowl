@@ -346,11 +346,16 @@ async def browser_read(max_chars: int = 20000) -> dict:
 async def browser_elements(only_in_viewport: bool = False) -> dict:
     """Interactive elements as a table: [id] role "name" value=… checked=…, plus screen coordinates for `computer`.
     Use the ids with browser_click / browser_type / browser_select."""
-    meta, els = await get_browser().elements()
+    b = get_browser()
+    meta, els = await b.elements()
     if only_in_viewport:
         els = [e for e in els if e.inViewport]
-    coords = {e.id: [e.screenX, e.screenY] for e in els}
-    return {**meta, "table": element_table(els, 300), "screen_xy": coords}
+    offset = await b.screen_offset(desktop.move)  # measured, not estimated; None without a desktop
+    if offset:
+        coords = {e.id: [e.x + offset[0], e.y + offset[1]] for e in els}
+    else:
+        coords = {e.id: [e.screenX, e.screenY] for e in els}
+    return {**meta, "table": element_table(els, 300), "screen_xy": coords, "calibrated": bool(offset)}
 
 
 @tool
