@@ -4,76 +4,32 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
-import subprocess
 import sys
 import time
-from importlib import resources
 
 import httpx
 
-from . import __version__, audit, control, llm
+from . import __version__, audit, control, hostos, llm
 from .config import get_config
-
-
-def _lima_vm() -> dict | None:
-    if not shutil.which("limactl"):
-        return None
-    out = subprocess.run(["limactl", "list", "--json"], capture_output=True, text=True).stdout
-    for line in out.splitlines():
-        try:
-            vm = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if vm.get("name") == get_config().vm_name:
-            return vm
-    return None
-
-
-def _intel_mac() -> bool:
-    import platform
-
-    return sys.platform == "darwin" and platform.machine() == "x86_64"
+from .vm import get_backend
 
 
 def cmd_up(_args) -> int:
-    cfg = get_config()
-    cfg.ensure_dirs()
-    if not shutil.which("limactl"):
-        print("Lima is not installed. Run:  brew install lima", file=sys.stderr)
-        return 1
-    vm = _lima_vm()
-    if vm is None:
-        template = resources.files("fishbowl").joinpath("lima.yaml")
-        with resources.as_file(template) as path:
-            print(f"Creating VM '{cfg.vm_name}' (first boot downloads Debian and installs a desktop, ~3-5 min)…")
-            cmd = ["limactl", "start", "--name", cfg.vm_name, "--tty=false"]
-            if _intel_mac():
-                # Apple's Virtualization.framework is unreliable on Intel Macs; QEMU works everywhere.
-                if not shutil.which("qemu-system-x86_64"):
-                    print("Intel Mac detected: fishbowl uses QEMU here. Run:  brew install qemu", file=sys.stderr)
-                    return 1
-                cmd.append("--vm-type=qemu")
-            rc = subprocess.call(cmd + [str(path)])
-    elif vm.get("status") != "Running":
-        rc = subprocess.call(["limactl", "start", cfg.vm_name])
-    else:
-        print(f"VM '{cfg.vm_name}' is already running.")
-        rc = 0
+    rc = get_backend().up()
     if rc == 0:
-        print("\nNext:  fishbowl view   (watch the screen)   ·   fishbowl install   (add to Claude)")
+        print("\nNext:  fishbowl view   (watch the screen)   ·   fishbowl install   (connect your agent)")
     return rc
 
 
 def cmd_down(_args) -> int:
-    return subprocess.call(["limactl", "stop", get_config().vm_name])
+    return get_backend().down()
 
 
 def cmd_destroy(args) -> int:
     if not args.yes:
         print("This deletes the VM disk (your ~/vc/workspace stays). Re-run with --yes to confirm.")
         return 1
-    return subprocess.call(["limactl", "delete", "--force", get_config().vm_name])
+    return get_backend().destroy()
 
 
 def _get(url: str) -> bool:
@@ -92,16 +48,14 @@ def cmd_doctor(_args) -> int:
         ok &= passed
         print(f"  {'✓' if passed else '✗'} {name}" + (f"  → {hint}" if hint and not passed else ""))
 
-    print(f"fishbowl {__version__}")
-    check("limactl installed", bool(shutil.which("limactl")), "brew install lima")
-    if _intel_mac():
-        check("QEMU installed (needed on Intel Macs)", bool(shutil.which("qemu-system-x86_64")), "brew install qemu")
-    vm = _lima_vm()
-    check(f"VM '{cfg.vm_name}' running", bool(vm and vm.get("status") == "Running"), "fishbowl up")
+    backend = get_backend()
+    print(f"fishbowl {__version__} · {hostos.describe()} · {backend.name}")
+    for name, passed, hint in backend.checks():
+        check(name, passed, hint)
     check(
         f"Chromium CDP on {cfg.cdp_url}",
         _get(cfg.cdp_url + "/json/version"),
-        "limactl shell fishbowl -- systemctl restart fishbowl-chromium",
+        "fishbowl down && fishbowl up",
     )
     check(
         f"noVNC on 127.0.0.1:{cfg.novnc_port}",
@@ -128,12 +82,13 @@ def cmd_doctor(_args) -> int:
 
 def cmd_status(_args) -> int:
     cfg = get_config()
-    vm = _lima_vm()
     st = control.read_state()
     print(
         json.dumps(
             {
-                "vm": vm.get("status") if vm else "absent",
+                "host": hostos.describe(),
+                "backend": get_backend().name,
+                "vm": get_backend().status(),
                 "cdp": _get(cfg.cdp_url + "/json/version"),
                 "viewer_open": control.viewer_is_open(),
                 "paused": st.get("paused"),

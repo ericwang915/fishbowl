@@ -61,7 +61,18 @@ def _json_install(path: Path, remove: bool) -> str:
 
 
 def claude_desktop_config() -> Path:
-    return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    import os
+
+    from . import hostos
+
+    k = hostos.kind()
+    if k == "macos":
+        base = Path.home() / "Library" / "Application Support"
+    elif k == "windows":
+        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return base / "Claude" / "claude_desktop_config.json"
 
 
 def cursor_config() -> Path:

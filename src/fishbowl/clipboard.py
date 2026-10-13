@@ -21,11 +21,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import subprocess
-import sys
 from collections.abc import Awaitable, Callable
 
-from . import control
+from . import control, hostos
 from .config import get_config
 from .executor import get_executor
 
@@ -49,12 +47,12 @@ done
 """
 
 
-def _mac_get() -> str:
-    return subprocess.run(["pbpaste"], capture_output=True, text=True).stdout
+def _mac_get() -> str:  # "Mac" = the host machine: macOS, Windows or Linux
+    return hostos.clipboard_get()
 
 
 def _mac_set(text: str) -> None:
-    subprocess.run(["pbcopy"], input=text, text=True)
+    hostos.clipboard_set(text)
 
 
 def human_in_control() -> bool:
@@ -174,6 +172,8 @@ def remove_legacy_file() -> bool:
 
 async def disable_legacy_vm_loop() -> None:
     """VMs created by older templates run a file-based loop; switch it off."""
+    if get_config().executor != "lima":
+        return
     await get_executor().run(
         "sudo -n systemctl disable --now fishbowl-clipboard >/dev/null 2>&1; rm -f /workspace/.fishbowl/clipboard",
         timeout=20,
@@ -181,7 +181,7 @@ async def disable_legacy_vm_loop() -> None:
 
 
 async def run_forever() -> None:
-    if sys.platform != "darwin":
+    if not hostos.clipboard_available():
         return
     remove_legacy_file()
     try:

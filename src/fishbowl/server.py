@@ -85,7 +85,11 @@ async def lifespan(_server):
     cfg.ensure_dirs()
     audit.prune_screenshots()
     control.ensure_server()
-    sync = asyncio.create_task(clipboard.run_forever()) if cfg.executor == "lima" else None
+    if cfg.executor == "wsl":
+        from .vm import WSLBackend
+
+        await asyncio.to_thread(WSLBackend().ensure_running)
+    sync = asyncio.create_task(clipboard.run_forever()) if cfg.executor in ("lima", "wsl") else None
     try:
         yield {}
     finally:

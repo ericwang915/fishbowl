@@ -76,13 +76,33 @@ class LimaExecutor(Executor):
         ]
 
 
+class WSLExecutor(Executor):
+    """Windows: commands run in the fishbowl WSL2 distro as its unprivileged `fishbowl` user."""
+
+    def argv(self, script: str) -> list[str]:
+        cfg = get_config()
+        return [
+            "wsl.exe",
+            "--distribution",
+            cfg.vm_name,
+            "--user",
+            "fishbowl",
+            "--cd",
+            "/workspace",
+            "--exec",
+            "bash",
+            "-lc",
+            f"export DISPLAY=:1; {script}",
+        ]
+
+
 class LocalExecutor(Executor):
     def argv(self, script: str) -> list[str]:
         return ["bash", "-lc", f"export DISPLAY=${{DISPLAY:-:1}}; {script}"]
 
 
 def get_executor() -> Executor:
-    return LocalExecutor() if get_config().executor == "local" else LimaExecutor()
+    return {"local": LocalExecutor, "wsl": WSLExecutor}.get(get_config().executor, LimaExecutor)()
 
 
 def q(s: str) -> str:

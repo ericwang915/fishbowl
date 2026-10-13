@@ -51,8 +51,7 @@ def test_pause_and_viewer_server():
 
 def test_viewer_not_reopened_when_open(monkeypatch):
     opened = []
-    monkeypatch.setattr(control.subprocess, "Popen", lambda *a, **k: opened.append(a))
-    monkeypatch.setattr(control.sys, "platform", "darwin")
+    monkeypatch.setattr(control.hostos, "open_url", lambda url: opened.append(url) or True)
     control._last_open_attempt = 0
     control.write_state(heartbeat=time.time())
     assert control.open_viewer() is False and not opened
@@ -206,11 +205,11 @@ def test_lima_executor_argv(monkeypatch):
 
 
 def test_lima_template_isolation():
-    from importlib import resources
-
     import yaml
 
-    t = yaml.safe_load(resources.files("fishbowl").joinpath("lima.yaml").read_text())
+    from fishbowl.vm import lima_template
+
+    t = yaml.safe_load(lima_template())
     assert [m["location"] for m in t["mounts"]] == ["~/vc/workspace"]
     fwd = [p for p in t["portForwards"] if not p.get("ignore")]
     assert all(p["hostIP"] == "127.0.0.1" for p in fwd)

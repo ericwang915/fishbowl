@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import subprocess
-import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from typing import Any
 
+from . import hostos
 from .config import get_config
 
 HEARTBEAT_FRESH_S = 6.0
@@ -66,10 +65,7 @@ def open_viewer(force: bool = False) -> bool:
         return False
     _last_open_attempt = time.time()
     ensure_server()
-    if sys.platform == "darwin":
-        subprocess.Popen(["open", viewer_url()], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return True
-    return False
+    return hostos.open_url(viewer_url())
 
 
 def maybe_auto_open() -> None:

@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import hostos
+
 
 def _env(name: str, default: str) -> str:
     return os.environ.get(f"FISHBOWL_{name}", default)
@@ -22,8 +24,8 @@ class Config:
     screen_w: int = 1280
     screen_h: int = 800
     screenshot_retention_days: int = field(default_factory=lambda: int(_env("SCREENSHOT_DAYS", "7")))
-    # "lima" runs commands inside the VM; "local" runs them on this host (Linux CI, tests).
-    executor: str = field(default_factory=lambda: _env("EXECUTOR", "lima"))
+    # "lima" (macOS, Linux) or "wsl" (Windows) run commands inside the VM; "local" runs them on this host (CI, tests).
+    executor: str = field(default_factory=lambda: _env("EXECUTOR", hostos.default_backend()))
     auto_open_viewer: bool = field(default_factory=lambda: _env("AUTO_OPEN", "1") == "1")
 
     @property

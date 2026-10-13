@@ -1,4 +1,5 @@
 # fishbowl VM: Debian 12 desktop (1280x800) with Chromium, noVNC and xdotool.
+# A template: `fishbowl up` fills in the provisioning scripts (provision_*.sh, shared with WSL).
 # Isolation: the only host folder the VM sees is ~/vc/workspace, and every
 # forwarded port is bound to 127.0.0.1 on the Mac.
 minimumLimaVersion: "1.0.0"
@@ -33,53 +34,10 @@ portForwards:
 provision:
   - mode: system
     script: |
-      #!/bin/bash
-      set -eux
-      export DEBIAN_FRONTEND=noninteractive
-      command -v chromium >/dev/null && command -v x11vnc >/dev/null && exit 0
-      apt-get update
-      apt-get install -y --no-install-recommends \
-        xvfb openbox x11vnc novnc websockify chromium xdotool xclip imagemagick xterm \
-        dbus-x11 fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji curl ca-certificates
+      __PROVISION_SYSTEM__
   - mode: user
     script: |
-      #!/bin/bash
-      set -eux
-      U=$(id -un); H=$HOME
-      unit() {  # name, description, after, command
-        sudo tee /etc/systemd/system/fishbowl-$1.service >/dev/null <<EOF
-      [Unit]
-      Description=fishbowl $2
-      After=$3
-      Requires=$3
-      [Service]
-      User=$U
-      Environment=DISPLAY=:1
-      Environment=HOME=$H
-      ExecStart=$4
-      Restart=always
-      RestartSec=1
-      [Install]
-      WantedBy=multi-user.target
-      EOF
-      }
-      sudo tee /etc/systemd/system/fishbowl-xvfb.service >/dev/null <<EOF
-      [Unit]
-      Description=fishbowl X display
-      [Service]
-      User=$U
-      ExecStart=/usr/bin/Xvfb :1 -screen 0 1280x800x24 -nolisten tcp -ac
-      Restart=always
-      [Install]
-      WantedBy=multi-user.target
-      EOF
-      unit wm "window manager" fishbowl-xvfb.service "/usr/bin/openbox"
-      unit vnc "VNC server" fishbowl-xvfb.service "/usr/bin/x11vnc -display :1 -localhost -forever -shared -nopw -rfbport 5900 -quiet"
-      unit novnc "noVNC" fishbowl-vnc.service "/usr/bin/websockify --web /usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900"
-      # The clipboard is bridged in memory by the MCP server over `limactl shell` (no service, nothing on disk).
-      unit chromium "Chromium" fishbowl-wm.service "/usr/bin/chromium --no-first-run --no-default-browser-check --disable-dev-shm-usage --password-store=basic --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --window-position=0,0 --window-size=1280,800 --start-maximized --user-data-dir=$H/.config/fishbowl-chromium about:blank"
-      sudo systemctl daemon-reload
-      sudo systemctl enable --now fishbowl-xvfb fishbowl-wm fishbowl-vnc fishbowl-novnc fishbowl-chromium
+      __PROVISION_DESKTOP__
 
 probes:
   - description: "Chromium DevTools is up"

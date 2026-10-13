@@ -29,6 +29,61 @@ jobs:
         env:
           CHROME_BIN: /usr/bin/google-chrome
 
+  platforms:
+    # Unit + browser tests on every host fishbowl supports (the VM itself can't nest on these runners).
+    name: test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "macOS Apple Silicon", os: macos-latest }
+          - { name: "macOS Intel", os: macos-15-intel }
+          - { name: "Windows x64", os: windows-latest }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+        env:
+          PYTHONUTF8: "1"
+
+  lima-vm:
+    # The real thing: `fishbowl up` boots the Lima VM (QEMU + KVM) from our template, then live tests run against it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Install QEMU and Lima
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils
+          VER=$(gh api repos/lima-vm/lima/releases/latest -q .tag_name)
+          curl -fsSL "https://github.com/lima-vm/lima/releases/download/${VER}/lima-${VER#v}-Linux-x86_64.tar.gz" | sudo tar Cxzf /usr/local -
+          limactl --version
+      - run: pip install -e ".[dev]"
+      - run: fishbowl up
+        timeout-minutes: 30
+      - run: fishbowl doctor
+      - run: pytest -q tests/test_vm_live.py
+        env:
+          FISHBOWL_VM_LIVE: "1"
+      - name: Logs on failure
+        if: failure()
+        run: |
+          tail -n 80 ~/.lima/fishbowl/ha.stderr.log || true
+          limactl shell fishbowl -- sudo journalctl -u 'fishbowl-*' --no-pager -n 120 || true
+
   desktop:
     # The same stack the VM runs (Xvfb 1280x800 + openbox + Chrome + xdotool + xclip), end to end.
     runs-on: ubuntu-latest

@@ -20,6 +20,8 @@ CHROME_CANDIDATES = [
     os.environ.get("CHROME_BIN", ""),
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     shutil.which("google-chrome") or "",
     shutil.which("google-chrome-stable") or "",
     shutil.which("chromium") or "",
