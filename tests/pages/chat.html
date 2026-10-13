@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Store support</title>
+<style>#log{height:400px;overflow:auto;border:1px solid #ccc}.msg{margin:4px}.footer{position:fixed;bottom:0}</style></head>
+<body>
+<h3>Support chat</h3>
+<div id="log"><div class="msg bot">Hi! How can I help with your order?</div></div>
+<div class="footer"><textarea id="in" placeholder="Type a message"></textarea><button id="send" aria-label="Send">➤</button>
+<p>Powered by DemoBot</p></div>
+<script>
+const mode = new URLSearchParams(location.search).get('mode') || 'answer';
+const log = document.getElementById('log'), inp = document.getElementById('in');
+function add(cls, text) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text; log.appendChild(d); return d; }
+function send() {
+  const t = inp.value.trim(); if (!t) return;
+  inp.value = '';
+  if (mode === 'nosend') return;               // message silently dropped
+  add('user', t);
+  if (mode === 'silent') return;               // bot never answers
+  const ph = add('bot', mode === 'sedang' ? 'Sedang mengetik...' : 'Thinking...');
+  setTimeout(() => {
+    if (mode === 'survey') { ph.textContent = 'How satisfied are you with this chat? 👍 👎'; return; }
+    // stream the answer in chunks, like real bots do
+    const parts = mode === 'sedang'
+      ? ['Pesanan Anda ', 'sedang dikirim ', 'dan tiba besok.']
+      : ['Your order #1042 ', 'shipped yesterday ', 'and arrives Friday. ', 'Track it at example.com/track.'];
+    ph.textContent = ''; let i = 0;
+    const iv = setInterval(() => { ph.textContent += parts[i++]; if (i >= parts.length) clearInterval(iv); }, 300);
+  }, 900);
+}
+inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+document.getElementById('send').onclick = send;
+</script>
+</body></html>

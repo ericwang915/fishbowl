@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fishbowl</title>
+<style>
+  :root { --bg:#0b0f14; --panel:#151b23; --fg:#e6edf3; --muted:#8b949e; --accent:#2f81f7; --warn:#d29922; --ok:#3fb950; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  iframe { position:fixed; inset:0; width:100%; height:100%; border:0; }
+  #bar { position:fixed; left:12px; bottom:12px; display:flex; gap:8px; align-items:center; background:var(--panel); padding:8px 10px; border-radius:10px; box-shadow:0 4px 18px rgba(0,0,0,.4); z-index:2; }
+  button { font:inherit; border:0; border-radius:7px; padding:6px 12px; cursor:pointer; color:#fff; background:var(--accent); }
+  button.pause { background:var(--warn); }
+  button.done { background:var(--ok); }
+  #status { color:var(--muted); min-width:110px; }
+  #handoff { display:none; position:fixed; top:12px; left:50%; transform:translateX(-50%); background:var(--warn); color:#111; padding:10px 14px; border-radius:10px; z-index:2; gap:10px; align-items:center; max-width:90vw; }
+  #handoff.show { display:flex; }
+  #handoff input { border:0; border-radius:6px; padding:5px 8px; min-width:180px; }
+</style>
+</head>
+<body>
+<iframe id="vnc" title="VM screen"></iframe>
+<div id="handoff"><span id="reason"></span><input id="note" placeholder="note for the agent (optional)"><button class="done" id="done">Done, give it back</button></div>
+<div id="bar"><span id="status">connecting…</span><button id="toggle">Pause</button></div>
+<script>
+  const vnc = `http://127.0.0.1:__NOVNC_PORT__/vnc.html?autoconnect=1&resize=scale&reconnect=1&path=websockify`;
+  document.getElementById('vnc').src = vnc;
+  const $ = id => document.getElementById(id);
+  let state = {};
+  async function post(path, body) {
+    const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {}) });
+    state = await r.json(); render();
+  }
+  function render() {
+    const paused = !!state.paused;
+    $('toggle').textContent = paused ? 'Resume' : 'Pause';
+    $('toggle').className = paused ? '' : 'pause';
+    $('status').textContent = state.handoff ? 'You have control' : paused ? 'Agent paused' : 'Agent driving';
+    $('handoff').classList.toggle('show', !!state.handoff);
+    if (state.handoff) $('reason').textContent = 'Agent handed you the screen: ' + state.handoff.reason;
+  }
+  $('toggle').onclick = () => post(state.paused ? '/resume' : '/pause');
+  $('done').onclick = () => post('/handoff/done', { note: $('note').value });
+  async function beat() { try { await post('/heartbeat'); } catch (e) { $('status').textContent = 'server offline'; } }
+  beat(); setInterval(beat, 2000);
+</script>
+</body>
+</html>
