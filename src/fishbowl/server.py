@@ -305,14 +305,17 @@ async def control_status() -> dict:
 
 @tool
 async def clipboard_get() -> dict:
-    """Read the VM clipboard (it is kept in sync with the Mac clipboard)."""
+    """Read the VM clipboard. What the agent copies reaches the Mac; the Mac clipboard only reaches the VM
+    while the human controls the screen (handoff or Pause), and is cleared when control returns."""
     r = await get_executor().run("xclip -o -selection clipboard 2>/dev/null || true", timeout=10)
+    if guard.contains_secret(r.text):
+        return {"text": "[REDACTED: looks like a card number or secret]", "redacted": True}
     return {"text": r.text}
 
 
 @tool
 async def clipboard_set(text: str) -> dict:
-    """Set the VM clipboard (syncs to the Mac clipboard too)."""
+    """Set the VM clipboard (it also appears on the Mac clipboard)."""
     if guard.contains_secret(text):
         return {"error": "blocked", "detail": "looks like a card number or secret"}
     # xclip stays alive to serve the selection; detach its output so we don't wait on it.

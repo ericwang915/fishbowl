@@ -1,6 +1,7 @@
 """Audit log, control/viewer server, clipboard sync, desktop helpers, MCP server wiring."""
 
 import asyncio
+import contextlib
 import os
 import time
 
@@ -84,17 +85,86 @@ async def test_handoff_timeout(monkeypatch):
 # ----------------------------------------------------------------- clipboard
 
 
-def test_clipboard_two_way(monkeypatch):
-    mac = {"v": "hello from mac"}
-    monkeypatch.setattr(clipboard, "_mac_get", lambda: mac["v"])
-    monkeypatch.setattr(clipboard, "_mac_set", lambda t: mac.update(v=t))
-    state = {}
-    assert clipboard.sync_once(state) == "to_vm"
-    assert clipboard._file().read_text() == "hello from mac"
-    assert clipboard.sync_once(state) is None
-    clipboard._file().write_text("copied in vm")  # what the VM loop does
-    assert clipboard.sync_once(state) == "to_mac" and mac["v"] == "copied in vm"
-    assert clipboard.sync_once(state) is None
+def _bridge(in_control):
+    return clipboard.Bridge(spawn=None, mac_get=None, mac_set=None, in_control=lambda: in_control["v"])
+
+
+def test_mac_clipboard_reaches_vm_only_while_human_controls():
+    ctl = {"v": False}
+    b = _bridge(ctl)
+    assert b.tick("hunter2 from 1Password") == []  # agent driving: nothing from the Mac enters the VM
+    ctl["v"] = True  # handoff starts
+    assert b.tick("hunter2 from 1Password") == ["S " + clipboard._b64("hunter2 from 1Password")]
+    assert b.tick("hunter2 from 1Password") == []  # sent once
+    assert b.tick("second copy") == ["S " + clipboard._b64("second copy")]
+    ctl["v"] = False  # human clicks Done
+    assert b.tick("second copy") == ["C"]  # the VM clipboard is wiped
+    assert b.tick("later copy on the Mac") == []
+
+
+def test_vm_clipboard_reaches_mac_and_is_not_wiped():
+    ctl = {"v": False}
+    b = _bridge(ctl)
+    b.tick("old mac text")
+    assert b.from_vm("V " + clipboard._b64("result the agent copied")) == "result the agent copied"
+    assert b.from_vm("V " + clipboard._b64("result the agent copied")) is None  # no echo loops
+    assert b.from_vm("garbage") is None
+    ctl["v"] = True
+    assert b.tick("result the agent copied") == ["S " + clipboard._b64("result the agent copied")]
+    # something copied inside the VM during a handoff (e.g. a 2FA code) is the VM's own: not wiped
+    b.from_vm("V " + clipboard._b64("123456"))
+    ctl["v"] = False
+    assert b.tick("123456") == []
+
+
+FAKE_VM = r"""
+import base64, sys
+log = open(sys.argv[1], "a")
+print("V " + base64.b64encode("copied in the vm".encode()).decode(), flush=True)
+for line in sys.stdin:
+    log.write(line); log.flush()
+"""
+
+
+async def test_bridge_plumbing_with_a_fake_vm(tmp_path):
+    import sys as _sys
+
+    script, log = tmp_path / "vm.py", tmp_path / "vm.log"
+    script.write_text(FAKE_VM)
+    mac = {"v": "on the mac"}
+    ctl = {"v": False}
+
+    async def spawn():
+        return await asyncio.create_subprocess_exec(
+            _sys.executable, str(script), str(log),
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+        )  # fmt: skip
+
+    b = clipboard.Bridge(spawn, lambda: mac["v"], lambda t: mac.update(v=t), lambda: ctl["v"], poll_s=0.05)
+    task = asyncio.create_task(b.run_once())
+    for _ in range(40):
+        await asyncio.sleep(0.05)
+        if mac["v"] == "copied in the vm":
+            break
+    assert mac["v"] == "copied in the vm"  # VM → Mac
+    ctl["v"] = True
+    mac["v"] = "password"
+    await asyncio.sleep(0.3)
+    ctl["v"] = False
+    await asyncio.sleep(0.3)
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task  # lets run_once kill and reap the fake VM
+    lines = log.read_text().splitlines()
+    assert lines == ["S " + clipboard._b64("password"), "C"]
+
+
+def test_legacy_clipboard_file_is_removed():
+    p = get_config().workspace / ".fishbowl" / "clipboard"
+    p.parent.mkdir(parents=True)
+    p.write_text("an old password")
+    assert clipboard.remove_legacy_file() and not p.exists() and not p.parent.exists()
+    assert clipboard.remove_legacy_file() is False
 
 
 # ----------------------------------------------------------------- desktop
@@ -145,6 +215,7 @@ def test_lima_template_isolation():
     fwd = [p for p in t["portForwards"] if not p.get("ignore")]
     assert all(p["hostIP"] == "127.0.0.1" for p in fwd)
     assert t["portForwards"][-1] == {"guestPortRange": [1, 65535], "ignore": True}
+    assert "fishbowl-clipboard" not in t["provision"][1]["script"]  # nothing mirrors the clipboard to disk
     assert "1280x800" in t["provision"][1]["script"]
 
 

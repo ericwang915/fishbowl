@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Security
+- **Clipboard bridge rewritten: in memory, never on disk.** Older versions mirrored the clipboard through a plaintext file in `~/vc/workspace/.fishbowl/`, where a password pasted during a login could stay, readable by the agent. Now a long-lived `limactl shell` pipe carries it. Mac → VM only flows while the human controls the screen (handoff or Pause), and the VM clipboard is wiped when control returns. The legacy file and VM service are removed automatically. `clipboard_get` redacts card numbers and API keys.
+
 ### Fast and slow thinking
 - **Fast mode is optional and turns on with Jev** (`TYPESAFE_API_KEY`), or with an explicit `FISHBOWL_FAST`. Without it, fishbowl runs normally: `browser_run` replies `fast_mode_off` and points to the step-by-step tools, the guard uses keyword rules, `judge_reply` uses the planner model (or replies `no_model`), and the server instructions tell the agent which mode it is in. Anthropic and OpenAI keys alone no longer turn on fast mode; they turn on the planner.
 - `browser_run` takes a `plan`, a `goal`, or both. With a goal, a **slow** planner model (Claude Sonnet by default) writes the plan and replans up to `max_replans` times after a handback, starting from the current page. The planner asks for missing info instead of inventing personal data.

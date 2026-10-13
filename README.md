@@ -87,7 +87,9 @@ real machine and running a headless browser you can't see. fishbowl takes a thir
 - The live viewer opens on the first action, and never opens a second copy
 - **Pause / Resume** button in the corner of the viewer
 - `handoff("log in please")` gives you the screen and waits until you click Done
-- The clipboard syncs both ways between your Mac and the VM
+- A clipboard bridge that never touches disk. What the agent copies reaches your Mac. Your Mac clipboard (for
+  example, a password from your password manager) only enters the VM while *you* have the screen, and is wiped
+  when you hand it back
 
 </td></tr>
 <tr><td valign="top">
@@ -218,10 +220,10 @@ pip install -e ".[dev]" && pytest     # real headless Chrome, no VM or API key n
 | `browser_run` handback paths | no change ×3 · login wall · guard refusal · human approval · secret in plan · pause · low confidence · timeout · an answer outside the offered options (e.g. typing without prepared text) |
 | Fast + slow thinking | fast mode off without Jev (browser_run explains, guard falls back to rules, judge falls back to the planner) · goal-only planning · replanning after a handback · the planner asking for missing info · DONE rejected by verification · stale decisions re-decided · freshness check in the same round trip · one evaluate per observation |
 | Providers | Jev `systemone` (multiple choice, retry on overload, invalid choices rejected) · enum-constrained emulation for Anthropic, OpenAI and Ollama · role resolution |
-| Live desktop (CI) | Xvfb, openbox, Chrome, xdotool and xclip: screenshots, pixel clicks landing on elements, Unicode typing, clipboard round trip |
+| Live desktop (CI) | Xvfb, openbox, Chrome, xdotool and xclip: screenshots, pixel clicks landing on elements, Unicode typing, the clipboard bridge with real xclip (Mac → VM only during a handoff, wiped afterwards) |
 | Guard | fallback has 100% recall and 0% false blocks on 30 labelled actions plus a 10-action holdout; secret and card detection |
 | MCP clients | a real stdio handshake (spawn `fishbowl mcp`, list 25 tools, call them) · `fishbowl install` for Codex, Claude Code, Claude Desktop and Cursor: merging, idempotency, removal |
-| Plus | `chat_ask` outcomes · audit log · viewer and pause server · clipboard sync · VM isolation config · MCP SDK 1.x and 2.x |
+| Plus | `chat_ask` outcomes · audit log · viewer and pause server · clipboard policy · VM isolation config · MCP SDK 1.x and 2.x |
 
 CI uses a deterministic stand-in for both models. Run the same 27 tasks against **your** fast model with
 `python examples/live_eval.py`.
