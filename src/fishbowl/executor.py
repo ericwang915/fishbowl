@@ -46,11 +46,25 @@ class Executor:
         return Result(proc.returncode or 0, out, err)
 
 
+def limactl_path() -> str:
+    """GUI MCP clients (Claude Desktop, Cursor) start servers with a minimal PATH, so look in the usual places."""
+    import shutil
+    from pathlib import Path
+
+    found = shutil.which("limactl")
+    if found:
+        return found
+    for p in ("/opt/homebrew/bin/limactl", "/usr/local/bin/limactl", str(Path.home() / ".local/bin/limactl")):
+        if Path(p).exists():
+            return p
+    return "limactl"
+
+
 class LimaExecutor(Executor):
     def argv(self, script: str) -> list[str]:
         cfg = get_config()
         return [
-            "limactl",
+            limactl_path(),
             "shell",
             "--workdir",
             "/workspace",

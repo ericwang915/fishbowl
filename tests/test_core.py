@@ -132,7 +132,7 @@ def test_lima_executor_argv(monkeypatch):
     from fishbowl.executor import LimaExecutor
 
     argv = LimaExecutor().argv("ls")
-    assert argv[:2] == ["limactl", "shell"] and "/workspace" in argv and argv[-1].endswith("ls")
+    assert argv[0].endswith("limactl") and argv[1] == "shell" and "/workspace" in argv and argv[-1].endswith("ls")
 
 
 def test_lima_template_isolation():

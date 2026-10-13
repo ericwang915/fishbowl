@@ -77,15 +77,20 @@ def maybe_auto_open() -> None:
         open_viewer()
 
 
-async def handoff(reason: str, timeout: float = 600) -> dict[str, Any]:
-    """Give the screen to the human and wait until they click Done (or timeout)."""
+async def handoff(reason: str, timeout: float = 600, on_tick=None) -> dict[str, Any]:
+    """Give the screen to the human and wait until they click Done (or timeout).
+    `on_tick(waited_s, timeout_s)` is awaited every few seconds while waiting."""
     write_state(handoff={"reason": reason, "since": time.time()})
     open_viewer(force=not viewer_is_open())
-    deadline = time.time() + timeout
+    start = time.time()
+    deadline = start + timeout
     while time.time() < deadline:
         st = read_state()
         if not st.get("handoff"):
             return {"status": "returned", "note": st.get("handoff_note", "")}
+        waited = time.time() - start
+        if on_tick and int(waited) % 5 == 0:
+            await on_tick(waited, timeout)
         await asyncio.sleep(1)
     write_state(handoff=None)
     return {"status": "timeout", "waited_s": timeout}

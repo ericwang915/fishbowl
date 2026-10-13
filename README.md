@@ -6,7 +6,7 @@
 
 ### Give your AI agent its own computer. Watch everything it does.
 
-A sandboxed Linux desktop on your Mac that Claude, GPT or a local model drives through **25 MCP tools**.<br>
+A sandboxed Linux desktop on your Mac that **Claude Code, Codex, Claude Desktop or Cursor** drives through **25 MCP tools**.<br>
 You watch live in your browser, pause it with one click, and take over for logins and captchas.
 
 [![CI](https://github.com/ericwang915/fishbowl/actions/workflows/ci.yml/badge.svg)](https://github.com/ericwang915/fishbowl/actions/workflows/ci.yml)
@@ -14,9 +14,10 @@ You watch live in your browser, pause it with one click, and take over for login
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-25%20tools-8A2BE2)
 ![Models](https://img.shields.io/badge/models-Claude%20·%20GPT%20·%20Ollama-orange)
+![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20·%20Codex%20·%20Claude%20Desktop%20·%20Cursor-black)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-D7FF64)](https://github.com/astral-sh/ruff)
 
-[**Quick start**](#-quick-start) · [**Why**](#-why-fishbowl) · [**Features**](#-features) · [**Models**](#-bring-your-own-model-or-run-fully-local) · [**Tools**](docs/tools.md) · [**Security**](docs/security.md)
+[**Quick start**](#-quick-start) · [**Why**](#-why-fishbowl) · [**Features**](#-features) · [**Models**](#-bring-your-own-model-or-run-fully-local) · [**Clients**](docs/clients.md) · [**Tools**](docs/tools.md) · [**Security**](docs/security.md)
 
 <img src="docs/demo.gif" alt="browser_run executing a plan on a shop page, stopping before 'Place order' to ask for approval" width="100%">
 
@@ -33,7 +34,7 @@ You watch live in your browser, pause it with one click, and take over for login
 brew install lima
 pip install git+https://github.com/ericwang915/fishbowl
 fishbowl up        # creates the VM (first boot ~5 min)
-fishbowl install   # registers the MCP server with Claude Code
+fishbowl install   # registers with every MCP client it finds: Claude Code, Codex, Claude Desktop, Cursor
 ```
 
 Then ask your agent:
@@ -42,19 +43,16 @@ Then ask your agent:
 
 A tab opens on your Mac showing the VM's screen, and you watch the agent work. Run `fishbowl doctor` if anything looks off.
 
-<details>
-<summary><b>Claude Desktop, Cursor and other MCP clients</b></summary>
+| Client | One-liner | Notes |
+|---|---|---|
+| **Claude Code** | `fishbowl install --client claude-code` | check with `/mcp` |
+| **Codex** | `fishbowl install --client codex` | sets `tool_timeout_sec = 900` and forwards your keys with `env_vars` |
+| **Claude Desktop** | `fishbowl install --client claude-desktop` | restart the app |
+| **Cursor** | `fishbowl install --client cursor` | |
+| anything else | `fishbowl install --client print` | standard stdio JSON snippet |
 
-```json
-{
-  "mcpServers": {
-    "fishbowl": { "command": "fishbowl", "args": ["mcp"], "env": { "FISHBOWL_LLM": "ollama" } }
-  }
-}
-```
-
-`fishbowl install --client print` prints this snippet with the right path for your machine.
-</details>
+See [docs/clients.md](docs/clients.md) for details, and [examples/AGENTS.md](examples/AGENTS.md) for house rules
+to give your agent (Codex reads `AGENTS.md`; Claude Code reads `CLAUDE.md`).
 
 ## 🤔 Why fishbowl?
 
@@ -200,6 +198,7 @@ pip install -e ".[dev]" && pytest     # real headless Chrome, no VM or API key n
 | `browser_run` handback paths | no change ×3 · login wall · guard refusal · human approval · secret in plan · pause · low confidence · timeout · the model trying to type text the plan didn't give it |
 | Live desktop (CI) | Xvfb, openbox, Chrome, xdotool and xclip: screenshots, pixel clicks landing on elements, Unicode typing, clipboard round trip |
 | Guard | fallback has 100% recall and 0% false blocks on 30 labelled actions plus a 10-action holdout; secret and card detection |
+| MCP clients | a real stdio handshake (spawn `fishbowl mcp`, list 25 tools, call them) · `fishbowl install` for Codex, Claude Code, Claude Desktop and Cursor: merging, idempotency, removal |
 | Plus | `chat_ask` outcomes · the three provider adapters · audit log · viewer and pause server · clipboard sync · VM isolation config · MCP SDK 1.x and 2.x |
 
 CI uses a deterministic stand-in for the decision model. Run the same 27 tasks against **your** model with
@@ -212,7 +211,7 @@ fishbowl up | down | destroy --yes     VM lifecycle
 fishbowl view                          open the live viewer
 fishbowl doctor                        health checks (VM, CDP, noVNC, model)
 fishbowl status | logs | stats         state, audit log, model usage
-fishbowl install [--client print]      register with Claude Code, or print the config JSON
+fishbowl install [--client X] [--remove]   register with Claude Code, Codex, Claude Desktop or Cursor
 fishbowl mcp                           run the MCP server on stdio
 ```
 

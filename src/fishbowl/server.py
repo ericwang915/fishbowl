@@ -156,6 +156,20 @@ async def _guard_commit(ctx, action: str, target: str, approved: bool) -> dict |
     }
 
 
+def _progress(ctx: Context | None):
+    """A progress reporter bound to this call, or None. Never raises."""
+    if ctx is None:
+        return None
+
+    async def report(done: float, total: float, message: str) -> None:
+        try:
+            await ctx.report_progress(done, total, message)
+        except Exception:
+            pass
+
+    return report
+
+
 async def _screenshot_image() -> Image:
     png = await desktop.screenshot()
     audit.save_screenshot(png)
@@ -255,10 +269,12 @@ async def view_screen() -> dict:
 
 
 @tool
-async def handoff(reason: str, timeout_s: float = 600) -> dict:
+async def handoff(reason: str, timeout_s: float = 600, ctx: Context | None = None) -> dict:
     """Give the screen to the human (to log in, solve a captcha, decide something). Blocks until they click
     "Done" in the viewer or the timeout passes; returns any note they typed."""
-    return await control.handoff(reason, timeout=timeout_s)
+    report = _progress(ctx)
+    tick = (lambda waited, total: report(waited, total, f"waiting for the human: {reason}")) if report else None
+    return await control.handoff(reason, timeout=timeout_s, on_tick=tick)
 
 
 @tool
@@ -435,7 +451,7 @@ async def browser_run(
     Only `text` written in the plan is ever typed. Returns status done | handback | needs_approval | paused |
     timeout | error, with the reason and a step log. `allow` pre-approves guard categories such as
     ["send_message"] when the user already agreed."""
-    runner = Runner(get_browser(), approver=lambda m: _ask_human(ctx, m), allow=allow)
+    runner = Runner(get_browser(), approver=lambda m: _ask_human(ctx, m), allow=allow, progress=_progress(ctx))
     return (await runner.run(plan, timeout_s=timeout_s)).as_dict()
 
 

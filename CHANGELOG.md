@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `fishbowl install` now registers with **Codex** (writes `~/.codex/config.toml` with `tool_timeout_sec = 900` and `env_vars` forwarding), **Claude Code**, **Claude Desktop** and **Cursor**, or every client it finds (`--client all`, the default). Supports `--remove`.
+- `browser_run` and `handoff` send MCP progress notifications, so clients with per-call timeouts keep waiting.
+- `limactl` is found even when a GUI client starts the server with a minimal `PATH`.
+- New `docs/clients.md` and `examples/AGENTS.md`; a stdio handshake test that spawns `fishbowl mcp` like a real client.
+
 ## 0.1.0 (2026-10-13)
 
 First public release.

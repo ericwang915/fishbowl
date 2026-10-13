@@ -170,15 +170,18 @@ def cmd_stats(_args) -> int:
 
 
 def cmd_install(args) -> int:
-    exe = shutil.which("fishbowl") or f"{sys.executable} -m fishbowl"
-    snippet = {"mcpServers": {"fishbowl": {"command": exe.split()[0], "args": exe.split()[1:] + ["mcp"]}}}
-    if args.client == "claude-code" and shutil.which("claude"):
-        return subprocess.call(["claude", "mcp", "add", "fishbowl", "--scope", "user", "--", *exe.split(), "mcp"])
-    print(
-        "Add this to your MCP client config (Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json):"
-    )
-    print(json.dumps(snippet, indent=2))
-    return 0
+    from . import install
+
+    if args.client == "print":
+        print("Add this to your MCP client's config:")
+        print(install.snippet())
+        return 0
+    results = install.install(args.client, remove=args.remove)
+    for name, msg in results.items():
+        print(f"  {name:15s} {msg}")
+    if not args.remove and any("registered" in m for m in results.values()):
+        print('\nRestart the client (or reconnect MCP), then ask: "Use fishbowl to open example.com".')
+    return 1 if any(m.startswith("failed") for m in results.values()) else 0
 
 
 def cmd_mcp(_args) -> int:
@@ -204,8 +207,14 @@ def main(argv: list[str] | None = None) -> int:
     lg.add_argument("-n", type=int, default=30)
     lg.set_defaults(fn=cmd_logs)
     sub.add_parser("stats", help="decision-model usage and spend").set_defaults(fn=cmd_stats)
-    ins = sub.add_parser("install", help="register with an MCP client")
-    ins.add_argument("--client", choices=["claude-code", "print"], default="claude-code")
+    ins = sub.add_parser("install", help="register with MCP clients (Claude Code, Codex, Claude Desktop, Cursor)")
+    ins.add_argument(
+        "--client",
+        choices=["all", "claude-code", "codex", "claude-desktop", "cursor", "print"],
+        default="all",
+        help="default: every client found on this machine",
+    )
+    ins.add_argument("--remove", action="store_true", help="unregister instead")
     ins.set_defaults(fn=cmd_install)
     sub.add_parser("mcp", help="run the MCP server on stdio").set_defaults(fn=cmd_mcp)
     args = p.parse_args(argv)

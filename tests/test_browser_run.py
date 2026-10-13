@@ -202,3 +202,18 @@ async def test_typed_text_only_comes_from_plan(browser, page_server):
     await browser.elements()
     res = await Runner(browser).run([T("fill the name")])
     assert res.status == "handback" and "no `text`" in res.reason
+
+
+async def test_progress_is_reported(browser, page_server):
+    llm.set_override(fake_llm)
+    await browser.navigate(f"{page_server}/form.html")
+    seen = []
+
+    async def progress(done, total, msg):
+        seen.append((done, total, msg))
+
+    res = await Runner(browser, progress=progress).run(
+        [T("type into 'full name'", "Ada"), T("click 'save draft' expect 'Saved'")]
+    )
+    assert res.status == "done"
+    assert [s[:2] for s in seen] == [(0, 2), (1, 2)] and "save draft" in seen[1][2]

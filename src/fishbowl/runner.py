@@ -68,6 +68,7 @@ LOGIN_WALL = re.compile(
 )
 
 Approver = Callable[[str], Awaitable[bool]]
+Progress = Callable[[float, float, str], Awaitable[None]]
 
 
 @dataclass
@@ -120,8 +121,10 @@ class Runner:
         allow: list[str] | None = None,
         max_no_change: int = 3,
         min_confidence: float = 0.45,
+        progress: Progress | None = None,
     ):
         self.b = browser
+        self.progress = progress
         self.approver = approver
         self.allow = allow or []
         self.max_no_change = max_no_change
@@ -140,6 +143,9 @@ class Runner:
                     return self._end(
                         res, t0, "handback", f"step {i + 1} text contains a card number or secret; refusing to type it"
                     )
+                if self.progress:
+                    # Keeps clients with per-call timeouts (Codex, Claude Code) from giving up on long runs.
+                    await self.progress(i, len(steps), f"step {i + 1}/{len(steps)}: {step.goal}")
                 outcome = await self._run_step(i, step, res, t0, timeout_s, max_actions_per_step, pinned)
                 if outcome is not None:
                     return outcome
