@@ -1,0 +1,37 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+        mcp: ["mcp>=2", "mcp<2"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]" "${{ matrix.mcp }}"
+      - run: pytest -q
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+
+  desktop:
+    # The same stack the VM runs (Xvfb 1280x800 + openbox + Chrome + xdotool + xclip), end to end.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y xvfb openbox xdotool xclip imagemagick x11-utils
+      - run: pip install -e ".[dev]"
+      - run: scripts/desktop-services.sh /usr/bin/google-chrome
+      - run: pytest -q tests/test_desktop_live.py tests/test_browser_run.py
+        env:
+          FISHBOWL_DESKTOP: "1"
+          DISPLAY: ":1"
+          CHROME_BIN: /usr/bin/google-chrome
