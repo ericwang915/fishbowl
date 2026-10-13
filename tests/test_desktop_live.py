@@ -37,7 +37,7 @@ async def test_pixel_click_lands_on_element(live):
     await server.browser_open(url=f"{live}/checkbox.html")
     els = await server.browser_elements()
     line = next(l for l in els["table"].splitlines() if "Newsletter" in l)
-    eid = int(line[1:line.index("]")])
+    eid = int(line[1 : line.index("]")])
     x, y = els["screen_xy"][eid]
     await server.computer(action="left_click", x=x, y=y, screenshot_after=False)
     await server.browser_wait(quiet_ms=300)
@@ -48,7 +48,7 @@ async def test_xdotool_typing_and_keys(live):
     await server.browser_open(url=f"{live}/search.html")
     els = await server.browser_elements()
     line = next(l for l in els["table"].splitlines() if "textbox" in l)
-    x, y = els["screen_xy"][int(line[1:line.index("]")])]
+    x, y = els["screen_xy"][int(line[1 : line.index("]")])]
     await server.computer(action="left_click", x=x, y=y, screenshot_after=False)
     await server.computer(action="type", text="héllo hub", screenshot_after=False)
     await server.computer(action="key", key="enter", screenshot_after=False)

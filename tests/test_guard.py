@@ -64,19 +64,34 @@ def test_heuristic_fallback_recall_and_false_blocks(rows):
     assert false_block == 0.0
 
 
-@pytest.mark.parametrize("text", [
-    "4111 1111 1111 1111", "4242-4242-4242-4242", "my card 5555555555554444 thanks",
-    "sk-ant-api03-" + "a" * 40, "sk-proj-" + "b" * 40, "AKIA" + "ABCDEFGHIJKLMNOP",
-    "ghp_" + "c" * 36, "xoxb-1234567890-abcdef", "-----BEGIN RSA PRIVATE KEY-----",
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "4111 1111 1111 1111",
+        "4242-4242-4242-4242",
+        "my card 5555555555554444 thanks",
+        "sk-ant-api03-" + "a" * 40,
+        "sk-proj-" + "b" * 40,
+        "AKIA" + "ABCDEFGHIJKLMNOP",
+        "ghp_" + "c" * 36,
+        "xoxb-1234567890-abcdef",
+        "-----BEGIN RSA PRIVATE KEY-----",
+    ],
+)
 def test_secrets_are_detected(text):
     assert guard.contains_secret(text)
 
 
-@pytest.mark.parametrize("text", [
-    "order 1234567", "call me at +62 812 3456 7890", "1111111111111111", "the sky is blue",
-    "4111 1111 1111 1112",  # fails Luhn
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "order 1234567",
+        "call me at +62 812 3456 7890",
+        "1111111111111111",
+        "the sky is blue",
+        "4111 1111 1111 1112",  # fails Luhn
+    ],
+)
 def test_non_secrets_pass(text):
     assert not guard.contains_secret(text)
 

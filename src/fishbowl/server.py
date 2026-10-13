@@ -1,6 +1,5 @@
 """MCP server (stdio) exposing 25 tools for driving the fishbowl VM."""
 
-
 import asyncio
 import contextlib
 import functools
@@ -12,14 +11,16 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 try:  # mcp >= 2
-    from mcp.server.mcpserver import Context, Image, MCPServer as _Server
+    from mcp.server.mcpserver import Context, Image
+    from mcp.server.mcpserver import MCPServer as _Server
 except ImportError:  # mcp 1.x
-    from mcp.server.fastmcp import Context, FastMCP as _Server, Image  # type: ignore
+    from mcp.server.fastmcp import Context, Image  # type: ignore
+    from mcp.server.fastmcp import FastMCP as _Server
 
 from . import audit, chat, clipboard, control, desktop, guard, llm
 from .browser import BrowserController, element_table
 from .config import get_config
-from .executor import get_executor, q
+from .executor import get_executor
 from .runner import Runner
 
 INSTRUCTIONS = """fishbowl is a Linux desktop (Debian, 1280x800, Chromium) in a local VM that a human can watch live.
@@ -39,8 +40,10 @@ def _code_fingerprint() -> tuple:
 
 
 _BOOT_FINGERPRINT = _code_fingerprint()
-STALE_NOTICE = ("fishbowl was updated on disk but this MCP process is still running the old code. "
-                "Reconnect the MCP server (e.g. /mcp → reconnect) to load the new version.")
+STALE_NOTICE = (
+    "fishbowl was updated on disk but this MCP process is still running the old code. "
+    "Reconnect the MCP server (e.g. /mcp → reconnect) to load the new version."
+)
 
 
 def stale_notice() -> str | None:
@@ -93,7 +96,10 @@ def tool(fn):
         if name in SCREEN_TOOLS:
             if control.is_paused() and name != "handoff":
                 audit.log(name, logged, {"refused": "paused"})
-                return {"error": "paused", "detail": "The human paused the agent in the viewer. Wait, or ask them to press Resume."}
+                return {
+                    "error": "paused",
+                    "detail": "The human paused the agent in the viewer. Wait, or ask them to press Resume.",
+                }
             control.maybe_auto_open()
         try:
             result = await fn(*args, **kwargs)
@@ -143,8 +149,11 @@ async def _guard_commit(ctx, action: str, target: str, approved: bool) -> dict |
         return None
     if await _ask_human(ctx, f"{action} on {target} ({v.reason})"):
         return None
-    return {"status": "needs_approval", "reason": v.reason,
-            "detail": "Ask the user. If they agree, call again with approved=true."}
+    return {
+        "status": "needs_approval",
+        "reason": v.reason,
+        "detail": "Ask the user. If they agree, call again with approved=true.",
+    }
 
 
 async def _screenshot_image() -> Image:
@@ -155,13 +164,32 @@ async def _screenshot_image() -> Image:
 
 # ============================== desktop ======================================
 
+
 @tool
 async def computer(
-    action: Literal["screenshot", "left_click", "right_click", "middle_click", "double_click", "mouse_move",
-                    "left_click_drag", "type", "key", "scroll", "cursor_position", "wait"],
-    x: int | None = None, y: int | None = None, x2: int | None = None, y2: int | None = None,
-    text: str | None = None, key: str | None = None,
-    direction: Literal["up", "down", "left", "right"] = "down", amount: int = 3, seconds: float = 1.0,
+    action: Literal[
+        "screenshot",
+        "left_click",
+        "right_click",
+        "middle_click",
+        "double_click",
+        "mouse_move",
+        "left_click_drag",
+        "type",
+        "key",
+        "scroll",
+        "cursor_position",
+        "wait",
+    ],
+    x: int | None = None,
+    y: int | None = None,
+    x2: int | None = None,
+    y2: int | None = None,
+    text: str | None = None,
+    key: str | None = None,
+    direction: Literal["up", "down", "left", "right"] = "down",
+    amount: int = 3,
+    seconds: float = 1.0,
     screenshot_after: bool = True,
 ) -> Any:
     """Pixel-level control of the 1280x800 desktop via xdotool. Coordinates are screen pixels.
@@ -171,7 +199,15 @@ async def computer(
     if action == "cursor_position":
         cx, cy = await desktop.cursor_position()
         return {"x": cx, "y": cy}
-    if action in ("left_click", "right_click", "middle_click", "double_click", "mouse_move", "scroll", "left_click_drag"):
+    if action in (
+        "left_click",
+        "right_click",
+        "middle_click",
+        "double_click",
+        "mouse_move",
+        "scroll",
+        "left_click_drag",
+    ):
         if x is None or y is None:
             return {"error": "x and y are required"}
     if action in ("left_click", "right_click", "middle_click"):
@@ -229,8 +265,12 @@ async def handoff(reason: str, timeout_s: float = 600) -> dict:
 async def control_status() -> dict:
     """Is the agent paused, is a handoff in progress, is the viewer open?"""
     st = control.read_state()
-    return {"paused": bool(st.get("paused")), "handoff": st.get("handoff"), "viewer_open": control.viewer_is_open(),
-            "viewer_url": control.viewer_url()}
+    return {
+        "paused": bool(st.get("paused")),
+        "handoff": st.get("handoff"),
+        "viewer_open": control.viewer_is_open(),
+        "viewer_url": control.viewer_url(),
+    }
 
 
 @tool
@@ -251,6 +291,7 @@ async def clipboard_set(text: str) -> dict:
 
 
 # ============================== browser ======================================
+
 
 @tool
 async def browser_open(url: str) -> dict:
@@ -293,8 +334,14 @@ async def browser_click(element: int, approved: bool = False, ctx: Context | Non
 
 
 @tool
-async def browser_type(element: int, text: str, clear: bool = True, submit: bool = False,
-                       approved: bool = False, ctx: Context | None = None) -> dict:
+async def browser_type(
+    element: int,
+    text: str,
+    clear: bool = True,
+    submit: bool = False,
+    approved: bool = False,
+    ctx: Context | None = None,
+) -> dict:
     """Type text straight into an element (no keystroke jitter). submit=true presses Enter afterwards.
     Card numbers and API keys are always refused."""
     if guard.contains_secret(text):
@@ -324,12 +371,14 @@ async def browser_scroll(direction: Literal["up", "down"] = "down", amount: floa
 
 
 @tool
-async def browser_press(key: Literal["Enter", "Tab", "Escape", "Backspace"], approved: bool = False,
-                        ctx: Context | None = None) -> dict:
+async def browser_press(
+    key: Literal["Enter", "Tab", "Escape", "Backspace"], approved: bool = False, ctx: Context | None = None
+) -> dict:
     """Press a key in the working tab. Enter goes through the approval guard."""
     if key == "Enter":
         focus = await get_browser().eval(
-            "(() => { const a = document.activeElement; return a ? (a.tagName + ' ' + (a.getAttribute('aria-label') || a.name || a.placeholder || '')) : 'body'; })()")
+            "(() => { const a = document.activeElement; return a ? (a.tagName + ' ' + (a.getAttribute('aria-label') || a.name || a.placeholder || '')) : 'body'; })()"
+        )
         blocked = await _guard_commit(ctx, "enter", str(focus), approved)
         if blocked:
             return blocked
@@ -356,8 +405,9 @@ async def browser_tabs() -> dict:
 
 
 @tool
-async def browser_tab(action: Literal["new", "switch", "close"], tab_id: str | None = None,
-                      url: str = "about:blank") -> dict:
+async def browser_tab(
+    action: Literal["new", "switch", "close"], tab_id: str | None = None, url: str = "about:blank"
+) -> dict:
     """Open a new working tab, switch the working tab, or close a tab. Tabs a site opens by itself never
     become the working tab unless you switch to them."""
     b = get_browser()
@@ -377,8 +427,9 @@ async def browser_back() -> dict:
 
 
 @tool
-async def browser_run(plan: list[dict[str, Any] | str], timeout_s: float = 180, allow: list[str] | None = None,
-                      ctx: Context | None = None) -> dict:
+async def browser_run(
+    plan: list[dict[str, Any] | str], timeout_s: float = 180, allow: list[str] | None = None, ctx: Context | None = None
+) -> dict:
     """Execute a multi-step web plan locally with the fast decision model. You write the plan; it acts.
     plan: [{"goal": "search for 'usb c hub'", "text": "usb c hub"}, {"goal": "open the first result"}, …]
     Only `text` written in the plan is ever typed. Returns status done | handback | needs_approval | paused |
@@ -390,9 +441,11 @@ async def browser_run(plan: list[dict[str, Any] | str], timeout_s: float = 180, 
 
 # ============================== chatbot testing ==============================
 
+
 @tool
-async def chat_ask(message: str, input_selector: str | None = None, send_selector: str | None = None,
-                   timeout_s: float = 60) -> dict:
+async def chat_ask(
+    message: str, input_selector: str | None = None, send_selector: str | None = None, timeout_s: float = 60
+) -> dict:
     """Ask a web chatbot one question on the current page: types it, confirms it shows up in the conversation,
     waits for the reply to settle (ignoring "Thinking…" style placeholders) and labels the outcome:
     answered | no_reply | survey_only | placeholder_stuck | send_failed | blocked."""
@@ -400,8 +453,13 @@ async def chat_ask(message: str, input_selector: str | None = None, send_selecto
 
 
 @tool
-async def judge_reply(question: str, reply: str, label: str | None = None, expected_language: str | None = None,
-                      store_context: str | None = None) -> dict:
+async def judge_reply(
+    question: str,
+    reply: str,
+    label: str | None = None,
+    expected_language: str | None = None,
+    store_context: str | None = None,
+) -> dict:
     """Grade a chatbot reply: reply type, language match, actionable, cites store data, score 1-5, issues.
     Pass chat_ask's label; no_reply/survey_only are graded by rule without a model call."""
     return await chat.judge_reply(question, reply, label, expected_language, store_context)

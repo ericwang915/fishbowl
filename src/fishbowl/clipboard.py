@@ -57,4 +57,3 @@ async def run_forever() -> None:
         except Exception:
             pass
         await asyncio.sleep(POLL_S)
-

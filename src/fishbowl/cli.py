@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import shutil
 import subprocess
@@ -99,8 +98,16 @@ def cmd_doctor(_args) -> int:
         check("QEMU installed (needed on Intel Macs)", bool(shutil.which("qemu-system-x86_64")), "brew install qemu")
     vm = _lima_vm()
     check(f"VM '{cfg.vm_name}' running", bool(vm and vm.get("status") == "Running"), "fishbowl up")
-    check(f"Chromium CDP on {cfg.cdp_url}", _get(cfg.cdp_url + "/json/version"), "limactl shell fishbowl -- systemctl restart fishbowl-chromium")
-    check(f"noVNC on 127.0.0.1:{cfg.novnc_port}", _get(f"http://127.0.0.1:{cfg.novnc_port}/vnc.html"), "systemctl restart fishbowl-novnc")
+    check(
+        f"Chromium CDP on {cfg.cdp_url}",
+        _get(cfg.cdp_url + "/json/version"),
+        "limactl shell fishbowl -- systemctl restart fishbowl-chromium",
+    )
+    check(
+        f"noVNC on 127.0.0.1:{cfg.novnc_port}",
+        _get(f"http://127.0.0.1:{cfg.novnc_port}/vnc.html"),
+        "systemctl restart fishbowl-novnc",
+    )
     check(f"workspace {cfg.workspace}", cfg.workspace.exists(), "fishbowl up")
     try:
         s = llm.LLMSettings.from_env()
@@ -120,13 +127,19 @@ def cmd_status(_args) -> int:
     cfg = get_config()
     vm = _lima_vm()
     st = control.read_state()
-    print(json.dumps({
-        "vm": vm.get("status") if vm else "absent",
-        "cdp": _get(cfg.cdp_url + "/json/version"),
-        "viewer_open": control.viewer_is_open(),
-        "paused": st.get("paused"), "handoff": st.get("handoff"),
-        "workspace": str(cfg.workspace),
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "vm": vm.get("status") if vm else "absent",
+                "cdp": _get(cfg.cdp_url + "/json/version"),
+                "viewer_open": control.viewer_is_open(),
+                "paused": st.get("paused"),
+                "handoff": st.get("handoff"),
+                "workspace": str(cfg.workspace),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -161,7 +174,9 @@ def cmd_install(args) -> int:
     snippet = {"mcpServers": {"fishbowl": {"command": exe.split()[0], "args": exe.split()[1:] + ["mcp"]}}}
     if args.client == "claude-code" and shutil.which("claude"):
         return subprocess.call(["claude", "mcp", "add", "fishbowl", "--scope", "user", "--", *exe.split(), "mcp"])
-    print("Add this to your MCP client config (Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json):")
+    print(
+        "Add this to your MCP client config (Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json):"
+    )
     print(json.dumps(snippet, indent=2))
     return 0
 

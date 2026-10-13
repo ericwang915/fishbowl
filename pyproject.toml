@@ -32,6 +32,9 @@ fishbowl = "fishbowl.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/ericwang915/fishbowl"
+Documentation = "https://github.com/ericwang915/fishbowl/blob/main/docs/tools.md"
+Changelog = "https://github.com/ericwang915/fishbowl/blob/main/CHANGELOG.md"
+Issues = "https://github.com/ericwang915/fishbowl/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fishbowl"]
@@ -39,3 +42,12 @@ packages = ["src/fishbowl"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# E741: `l` for "line" is fine here; UP031: the JS templates use % on purpose.
+ignore = ["E501", "E741", "UP031"]

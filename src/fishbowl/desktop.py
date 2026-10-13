@@ -11,11 +11,26 @@ SCROLL_BUTTONS = {"up": 4, "down": 5, "left": 6, "right": 7}
 
 # Friendly key names -> xdotool keysyms.
 KEY_ALIASES = {
-    "enter": "Return", "return": "Return", "esc": "Escape", "escape": "Escape",
-    "tab": "Tab", "backspace": "BackSpace", "delete": "Delete", "space": "space",
-    "up": "Up", "down": "Down", "left": "Left", "right": "Right",
-    "pageup": "Prior", "pagedown": "Next", "home": "Home", "end": "End",
-    "cmd": "ctrl", "command": "ctrl", "control": "ctrl", "option": "alt",
+    "enter": "Return",
+    "return": "Return",
+    "esc": "Escape",
+    "escape": "Escape",
+    "tab": "Tab",
+    "backspace": "BackSpace",
+    "delete": "Delete",
+    "space": "space",
+    "up": "Up",
+    "down": "Down",
+    "left": "Left",
+    "right": "Right",
+    "pageup": "Prior",
+    "pagedown": "Next",
+    "home": "Home",
+    "end": "End",
+    "cmd": "ctrl",
+    "command": "ctrl",
+    "control": "ctrl",
+    "option": "alt",
 }
 
 
@@ -59,8 +74,7 @@ async def move(x: int, y: int) -> None:
 
 async def drag(x1: int, y1: int, x2: int, y2: int) -> None:
     await _xdo(
-        f"xdotool mousemove --sync {x1} {y1} mousedown 1 sleep 0.1 "
-        f"mousemove --sync {x2} {y2} sleep 0.1 mouseup 1"
+        f"xdotool mousemove --sync {x1} {y1} mousedown 1 sleep 0.1 mousemove --sync {x2} {y2} sleep 0.1 mouseup 1"
     )
 
 
@@ -69,13 +83,15 @@ async def type_text(text: str) -> None:
         # xdotool drops characters missing from the X keymap (é, 中文…); paste them instead.
         r = await get_executor().run(
             "xclip -i -selection clipboard >/dev/null 2>&1 && sleep 0.1 && xdotool key --clearmodifiers ctrl+v",
-            timeout=30, stdin=text.encode())
+            timeout=30,
+            stdin=text.encode(),
+        )
         if r.code != 0:
             raise DesktopError(r.err.strip() or f"paste failed ({r.code})")
         return
     # Chunk so very long strings don't hit argv limits.
     for i in range(0, len(text), 200):
-        await _xdo(f"xdotool type --delay 8 -- {q(text[i:i + 200])}", timeout=120)
+        await _xdo(f"xdotool type --delay 8 -- {q(text[i : i + 200])}", timeout=120)
 
 
 async def key(combo: str) -> None:

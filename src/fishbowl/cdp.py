@@ -25,7 +25,7 @@ class Session:
         self._reader = asyncio.create_task(self._read())
 
     @classmethod
-    async def connect(cls, ws_url: str, target_id: str) -> "Session":
+    async def connect(cls, ws_url: str, target_id: str) -> Session:
         ws = await websockets.connect(ws_url, max_size=None, ping_interval=None, open_timeout=10)
         return cls(ws, target_id)
 
@@ -73,9 +73,16 @@ class Session:
         return q
 
     async def evaluate(self, expr: str, timeout: float = 30) -> Any:
-        r = await self.send("Runtime.evaluate", {
-            "expression": expr, "returnByValue": True, "awaitPromise": True, "userGesture": True,
-        }, timeout=timeout)
+        r = await self.send(
+            "Runtime.evaluate",
+            {
+                "expression": expr,
+                "returnByValue": True,
+                "awaitPromise": True,
+                "userGesture": True,
+            },
+            timeout=timeout,
+        )
         if "exceptionDetails" in r:
             d = r["exceptionDetails"]
             raise CDPError(d.get("exception", {}).get("description") or d.get("text", "JS error"))

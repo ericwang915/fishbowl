@@ -38,10 +38,18 @@ def decide(prompt: str) -> dict:
     if g.startswith("give up"):
         return {"action": "handback", "element": 0, "confidence": 0.9, "reason": "asked to give up"}
     if g.startswith(("type", "search", "enter")) and has_text:
-        box = next((e for e in els if e["role"] in ("textbox", "searchbox") and (not target or target in e["name"].lower())), None)
+        box = next(
+            (e for e in els if e["role"] in ("textbox", "searchbox") and (not target or target in e["name"].lower())),
+            None,
+        )
         if box:
-            return {"action": "type", "element": box["id"], "submit": "submit" in g or g.startswith("search"),
-                    "confidence": 0.9, "reason": "type prepared text"}
+            return {
+                "action": "type",
+                "element": box["id"],
+                "submit": "submit" in g or g.startswith("search"),
+                "confidence": 0.9,
+                "reason": "type prepared text",
+            }
     if g.startswith("select"):
         opt = re.search(r"select '([^']+)'", goal).group(1)
         box = next((e for e in els if e["role"] == "combobox"), None)
@@ -90,6 +98,13 @@ async def fake_llm(purpose: str, system: str, user: str, schema: dict) -> dict:
         v = guard.heuristic(m.group(1), m.group(2), m.group(3))
         return {"needs_approval": v.needs_approval, "category": "other_safe", "reason": v.reason}
     if purpose == "judge":
-        return {"reply_type": "answer", "detected_language": "en", "language_match": True, "actionable": True,
-                "cites_store_data": "#" in user, "score": 4, "issues": []}
+        return {
+            "reply_type": "answer",
+            "detected_language": "en",
+            "language_match": True,
+            "actionable": True,
+            "cites_store_data": "#" in user,
+            "score": 4,
+            "issues": [],
+        }
     raise AssertionError(purpose)
