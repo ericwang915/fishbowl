@@ -2,7 +2,7 @@
 
 <img src="docs/logo.svg" width="112" alt="fishbowl logo">
 
-# fishbowl
+# fishbowl-jev-ultrafast
 
 ### Give your AI agent its own computer. Watch everything it does.
 
