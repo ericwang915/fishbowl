@@ -238,7 +238,16 @@ async def judge_reply(
         "store_facts": (store_context or "")[:3000] or None,
         "rules": JUDGE_RULES,
     }
-    a = await llm.choose("judge", state, JUDGE_QUESTIONS)
+    try:
+        a = await llm.choose("judge", state, JUDGE_QUESTIONS)
+    except llm.NotConfigured:
+        try:  # no fast model: let the planner model grade it
+            a = await llm.choose("judge", state, JUDGE_QUESTIONS, role="slow")
+        except llm.NotConfigured:
+            return {
+                "error": "no_model",
+                "detail": "judge_reply needs a model: set TYPESAFE_API_KEY (Jev) or ANTHROPIC_API_KEY / OPENAI_API_KEY",
+            }
     pick = {k: v["choice"] for k, v in a.items()}
     out = {
         "reply_type": pick["reply_type"],

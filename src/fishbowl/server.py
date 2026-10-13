@@ -23,10 +23,24 @@ from .config import get_config
 from .executor import get_executor
 from .runner import Runner, run_task
 
-INSTRUCTIONS = """fishbowl is a Linux desktop (Debian, 1280x800, Chromium) in a local VM that a human can watch live.
+BASE_INSTRUCTIONS = """fishbowl is a Linux desktop (Debian, 1280x800, Chromium) in a local VM that a human can watch live.
 Prefer the browser_* tools (fast, exact) over pixel clicks; use `computer` for anything outside the browser.
-For multi-step web tasks write a plan and call browser_run — it executes locally and hands back when stuck.
 If you hit a login, captcha or anything needing a person, call handoff. Only /workspace is shared with the Mac."""
+
+
+def instructions() -> str:
+    if llm.configured("fast"):
+        mode = (
+            "FAST MODE IS ON: for multi-step web tasks write a plan and call browser_run; it executes locally "
+            "and hands back with an observation when stuck."
+        )
+    else:
+        mode = (
+            "Fast mode is off (no Jev key): drive web pages yourself with browser_elements, browser_click, "
+            "browser_type, browser_select, browser_wait and browser_read. browser_run is unavailable."
+        )
+    return BASE_INSTRUCTIONS + "\n" + mode
+
 
 # ---------------------------------------------------------------------------
 # Stale-code detection: if the package on disk changes while this process runs
@@ -81,7 +95,7 @@ async def lifespan(_server):
             await _browser.close()
 
 
-mcp = _Server("fishbowl", instructions=INSTRUCTIONS, lifespan=lifespan)
+mcp = _Server("fishbowl", instructions=instructions(), lifespan=lifespan)
 
 SCREEN_TOOLS = {"computer", "browser_open", "browser_click", "browser_type", "browser_run", "chat_ask", "shell"}
 
@@ -462,6 +476,15 @@ async def browser_run(
     `allow` pre-approves guard categories such as ["send_message"] when the user already agreed."""
     if not plan and not goal:
         return {"error": "give a plan, a goal, or both"}
+    if not llm.enabled("fast"):
+        return {
+            "status": "fast_mode_off",
+            "reason": llm.HOW_TO_ENABLE["fast"],
+            "instead": "Drive the page step by step: browser_elements → browser_click / browser_type / browser_select, "
+            "browser_wait, browser_read.",
+        }
+    if not plan and not llm.enabled("slow"):
+        return {"status": "no_planner", "reason": llm.HOW_TO_ENABLE["slow"], "instead": "pass a `plan`"}
     runner = Runner(get_browser(), approver=lambda m: _ask_human(ctx, m), allow=allow, progress=_progress(ctx))
     res = await run_task(runner, goal=goal, plan=plan or None, max_replans=max_replans, timeout_s=timeout_s)
     return res.as_dict()

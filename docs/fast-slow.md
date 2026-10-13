@@ -1,6 +1,18 @@
 # Fast and slow thinking
 
-`browser_run` splits a web task between two kinds of model:
+Fast mode is **optional**. It turns on when `TYPESAFE_API_KEY` is set (Jev), or when you name another fast
+provider explicitly with `FISHBOWL_FAST`. Without it, fishbowl still runs: the driving agent uses the `browser_*`
+tools step by step, `browser_run` answers `fast_mode_off`, the approval guard uses its keyword rules, and
+`judge_reply` uses the planner model if one is configured.
+
+| configured | fast mode | `browser_run(plan)` | `browser_run(goal)` | guard | `judge_reply` |
+|---|---|---|---|---|---|
+| nothing | off | `fast_mode_off` | `fast_mode_off` | keyword rules | `no_model` |
+| Anthropic / OpenAI key | off | `fast_mode_off` | `fast_mode_off` | keyword rules | planner model |
+| Jev key | **on** | ✅ | `no_planner` | Jev | Jev |
+| Jev + Anthropic / OpenAI key | **on** | ✅ | ✅ plans + replans | Jev | Jev |
+
+When fast mode is on, `browser_run` splits a web task between two kinds of model:
 
 | | slow thinking | fast thinking |
 |---|---|---|

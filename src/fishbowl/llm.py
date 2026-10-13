@@ -22,8 +22,13 @@ Configuration (all optional):
   FISHBOWL_LLM_BASE_URL                   override the provider's base URL
   FISHBOWL_PRICE_IN / FISHBOWL_PRICE_OUT  USD per 1M tokens, for spend tracking
 
-Without explicit settings: fast = jev if TYPESAFE_API_KEY is set, else anthropic, openai,
-ollama (first key found); slow = anthropic, openai, ollama.
+Both roles are optional; nothing breaks without them.
+
+  fast  ON when TYPESAFE_API_KEY is set (Jev), or when FISHBOWL_FAST names a provider
+        explicitly. Otherwise fast mode is OFF: browser_run is unavailable, the guard uses
+        its keyword rules, and the driving agent works with the browser_* tools directly.
+  slow  ON when FISHBOWL_SLOW is set, or an Anthropic / OpenAI key exists. Only needed for
+        browser_run(goal=...) without a plan.
 """
 
 from __future__ import annotations
@@ -57,6 +62,30 @@ class LLMError(RuntimeError):
     pass
 
 
+class NotConfigured(LLMError):
+    """The role is switched off: no key and no explicit provider."""
+
+
+HOW_TO_ENABLE = {
+    "fast": "fast mode is off: set TYPESAFE_API_KEY to execute with Jev (or FISHBOWL_FAST=anthropic|openai|ollama)",
+    "slow": "no planner configured: set ANTHROPIC_API_KEY or OPENAI_API_KEY (or FISHBOWL_SLOW=ollama)",
+}
+
+
+def configured(role: str) -> bool:
+    try:
+        LLMSettings.from_env(role)
+        return True
+    except LLMError:
+        return False
+
+
+def enabled(role: str) -> bool:
+    """Configured, or replaced by a test hook."""
+    hooked = _choice_override is not None if role == "fast" else _override is not None
+    return hooked or configured(role)
+
+
 @dataclass
 class LLMSettings:
     role: str
@@ -73,8 +102,11 @@ class LLMSettings:
         R = role.upper()
         provider = (env(f"FISHBOWL_{R}") or env("FISHBOWL_LLM") or "").lower()
         if not provider:
-            order = ["jev", "anthropic", "openai"] if role == "fast" else ["anthropic", "openai"]
-            provider = next((p for p in order if env(KEY_ENV[p])), "ollama")
+            # Fast mode turns on with Jev only; other fast providers must be chosen explicitly.
+            order = ["jev"] if role == "fast" else ["anthropic", "openai"]
+            provider = next((p for p in order if env(KEY_ENV[p])), "")
+        if not provider:
+            raise NotConfigured(HOW_TO_ENABLE[role])
         if provider not in DEFAULT_MODELS[role]:
             allowed = ", ".join(DEFAULT_MODELS[role])
             hint = " (Jev is a fast executor; plan with anthropic, openai or ollama)" if provider == "jev" else ""
@@ -360,6 +392,8 @@ def _current(role: str) -> dict:
     try:
         cur = LLMSettings.from_env(role)
         return {"provider": cur.provider, "model": cur.model}
+    except NotConfigured as e:
+        return {"off": str(e)}
     except LLMError as e:
         return {"error": str(e)}
 

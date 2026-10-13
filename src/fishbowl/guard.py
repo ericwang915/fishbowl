@@ -174,6 +174,10 @@ async def assess(action: str, target: str, context: str = "", allowed: list[str]
         cat = a["category"]["choice"]
         needs = cat in RISKY and cat not in allowed
         return Verdict(needs, f"{cat}: {CATEGORIES[cat]}", "model")
+    except llm.NotConfigured:  # fast mode off → keyword rules (fail closed)
+        v = heuristic(action, target, context)
+        v.reason += " (keyword rules; fast mode is off)"
+        return v
     except Exception as e:  # model down → fail closed on the heuristic
         v = heuristic(action, target, context)
         v.reason += f" (model unavailable: {str(e)[:80]})"

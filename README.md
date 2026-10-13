@@ -67,7 +67,7 @@ real machine and running a headless browser you can't see. fishbowl takes a thir
 | Full desktop, not just a browser | ✅ | ❌ | ✅ xdotool + shell |
 | Asks before paying, sending or deleting | ❌ | ❌ | ✅ approval guard |
 | Record of everything it did | ❌ | ❌ | ✅ JSONL audit log + screenshots |
-| Long web tasks without big-model tokens | ❌ | ❌ | ✅ fast + slow thinking: Claude plans, Jev executes |
+| Long web tasks without big-model tokens | ❌ | ❌ | ✅ optional fast mode: Claude plans, Jev executes |
 
 ## ✨ Features
 
@@ -92,7 +92,8 @@ real machine and running a headless browser you can't see. fishbowl takes a thir
 </td></tr>
 <tr><td valign="top">
 
-### ⚡ Fast + slow thinking
+### ⚡ Fast + slow thinking (optional)
+Turned on by a Jev key; everything else works without it.
 **Slow**: Claude (or your agent) plans, and replans when the fast layer gets stuck.
 **Fast**: [Jev](https://github.com/browser-use/jev-ultrafast), or any small model, executes:
 - **One request per action** answers the operation *and* the target for each operation; every operation only offers compatible elements
@@ -132,28 +133,37 @@ real machine and running a headless browser you can't see. fishbowl takes a thir
 </td></tr>
 </table>
 
-## 🧠 Fast and slow thinking: bring your own models
+## 🧠 Fast mode (optional): Claude plans, Jev executes
 
-| Role | Job | Providers (auto-detected from your keys) |
-|---|---|---|
-| **slow** | turns a goal into a plan, and replans after a handback | Anthropic `claude-sonnet-5-5` · OpenAI `gpt-4.1` · Ollama `qwen3:14b` |
-| **fast** | answers multiple-choice questions: which operation, which element, is the step done, does this need approval, how good is this reply | **Jev** `jev-latest` · Anthropic `claude-haiku-5-5` · OpenAI `gpt-4.1-mini` · Ollama `qwen3:8b` |
+fishbowl works out of the box with **no model keys at all**: your agent (Claude Code, Codex…) drives the page with
+the `browser_*` tools, and the approval guard uses its keyword rules. Add keys to unlock more:
 
-When you drive fishbowl from Claude Code or Codex, **your agent already is the slow thinker**. Pass `plan`, and only
-the fast role is used.
+| You set | You get |
+|---|---|
+| nothing | all 25 tools work except `browser_run`, which replies `fast_mode_off` and points to the step-by-step tools. The guard uses keyword rules. |
+| `TYPESAFE_API_KEY` | **fast mode ON**: `browser_run` executes plans with Jev. The guard and `judge_reply` also run on Jev. |
+| + `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | **slow thinking**: `browser_run(goal=…)` plans and replans by itself (Claude Sonnet / GPT-4.1) |
 
 ```bash
-export TYPESAFE_API_KEY=…        # fast = Jev (TypeSafe), native multiple choice with calibrated probabilities
-export ANTHROPIC_API_KEY=…       # slow = Claude (and fast, if no Jev key)
-# or run everything locally:
-export FISHBOWL_FAST=ollama FISHBOWL_SLOW=ollama FISHBOWL_SLOW_MODEL=qwen3:32b
-# any OpenAI-compatible API (OpenRouter, Groq, DeepSeek, vLLM, LM Studio…):
-export FISHBOWL_FAST=openai OPENAI_BASE_URL=https://openrouter.ai/api/v1 FISHBOWL_FAST_MODEL=…
-export FISHBOWL_PRICE_IN=0.8 FISHBOWL_PRICE_OUT=4   # optional: USD per 1M tokens, so model_stats tracks spend
+export TYPESAFE_API_KEY=…        # fast mode: Jev, native multiple choice with calibrated probabilities
+export ANTHROPIC_API_KEY=…       # optional planner for goal-only runs
 ```
 
-Jev answers multiple-choice questions natively. For Anthropic, OpenAI and Ollama, the same questions become an
-enum-constrained JSON schema, so even a small local model can only pick an option that exists.
+When you drive fishbowl from Claude Code or Codex, **your agent already is the slow thinker**. Pass `plan`, and only
+Jev is needed. `fishbowl doctor` shows which modes are on.
+
+<details><summary><b>Advanced: a different fast model, or fully local</b></summary>
+
+Fast mode turns on automatically only with Jev. To use another fast model, choose it explicitly. The same
+multiple-choice questions then become an enum-constrained JSON schema, so the model can only pick options that exist.
+
+```bash
+export FISHBOWL_FAST=ollama FISHBOWL_FAST_MODEL=qwen3:8b          # local fast model
+export FISHBOWL_SLOW=ollama FISHBOWL_SLOW_MODEL=qwen3:32b         # local planner
+export FISHBOWL_FAST=openai OPENAI_BASE_URL=https://openrouter.ai/api/v1 FISHBOWL_FAST_MODEL=…   # any OpenAI-compatible API
+export FISHBOWL_PRICE_IN=0.8 FISHBOWL_PRICE_OUT=4                 # USD per 1M tokens, so model_stats tracks spend
+```
+</details>
 
 ## 🧪 `browser_run`: three ways to call it
 
@@ -206,7 +216,7 @@ pip install -e ".[dev]" && pytest     # real headless Chrome, no VM or API key n
 |---|---|
 | `browser_run`, 27 tasks across 9 types | search · forms · dropdowns · checkboxes and radios · cookie walls · scrolling and lazy loading · in-page tabs · slow pages · sites opening their own tabs |
 | `browser_run` handback paths | no change ×3 · login wall · guard refusal · human approval · secret in plan · pause · low confidence · timeout · an answer outside the offered options (e.g. typing without prepared text) |
-| Fast + slow thinking | goal-only planning · replanning after a handback · the planner asking for missing info · DONE rejected by verification · stale decisions re-decided · freshness check in the same round trip · one evaluate per observation |
+| Fast + slow thinking | fast mode off without Jev (browser_run explains, guard falls back to rules, judge falls back to the planner) · goal-only planning · replanning after a handback · the planner asking for missing info · DONE rejected by verification · stale decisions re-decided · freshness check in the same round trip · one evaluate per observation |
 | Providers | Jev `systemone` (multiple choice, retry on overload, invalid choices rejected) · enum-constrained emulation for Anthropic, OpenAI and Ollama · role resolution |
 | Live desktop (CI) | Xvfb, openbox, Chrome, xdotool and xclip: screenshots, pixel clicks landing on elements, Unicode typing, clipboard round trip |
 | Guard | fallback has 100% recall and 0% false blocks on 30 labelled actions plus a 10-action holdout; secret and card detection |

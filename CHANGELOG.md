@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fast and slow thinking
+- **Fast mode is optional and turns on with Jev** (`TYPESAFE_API_KEY`), or with an explicit `FISHBOWL_FAST`. Without it, fishbowl runs normally: `browser_run` replies `fast_mode_off` and points to the step-by-step tools, the guard uses keyword rules, `judge_reply` uses the planner model (or replies `no_model`), and the server instructions tell the agent which mode it is in. Anthropic and OpenAI keys alone no longer turn on fast mode; they turn on the planner.
 - `browser_run` takes a `plan`, a `goal`, or both. With a goal, a **slow** planner model (Claude Sonnet by default) writes the plan and replans up to `max_replans` times after a handback, starting from the current page. The planner asks for missing info instead of inventing personal data.
 - The **fast** executor answers multiple-choice questions in one request: the operation plus a speculative target per operation, each offering only compatible elements. Dropdown options are chosen directly. `TYPE_TEXT` is only offered when the plan has text.
 - **Jev (TypeSafe) provider** for the fast role (`TYPESAFE_API_KEY`), using its native multiple-choice API with calibrated confidence. Anthropic, OpenAI and Ollama answer the same questions through enum-constrained JSON schemas. Answers outside the offered options are refused.

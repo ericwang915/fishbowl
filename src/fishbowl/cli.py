@@ -118,6 +118,8 @@ def cmd_doctor(_args) -> int:
                 check(f"Ollama at {s.base_url}", reachable, "ollama serve && ollama pull " + s.model)
             else:
                 check(f"{s.provider} API key set", bool(s.api_key), f"export {llm.KEY_ENV[s.provider]}")
+        except llm.NotConfigured as e:
+            print(f"  · {role} thinking: off — {str(e).split(': ', 1)[1]}")  # optional, not a failure
         except llm.LLMError as e:
             check(f"{role} model config", False, str(e))
     print("All good." if ok else "Some checks failed.")

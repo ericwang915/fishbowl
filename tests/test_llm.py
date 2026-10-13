@@ -35,15 +35,25 @@ def mock_http(monkeypatch):
 
 
 def test_provider_autodetect(monkeypatch):
-    for k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FISHBOWL_LLM"):
+    for k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "TYPESAFE_API_KEY", "FISHBOWL_LLM"):
         monkeypatch.delenv(k, raising=False)
-    assert llm.LLMSettings.from_env().provider == "ollama"
+    # nothing configured: both roles are off, which is fine
+    for role in ("fast", "slow"):
+        with pytest.raises(llm.NotConfigured):
+            llm.LLMSettings.from_env(role)
+        assert not llm.configured(role)
+    # an Anthropic / OpenAI key turns on planning, but NOT fast mode
     monkeypatch.setenv("OPENAI_API_KEY", "x")
-    assert llm.LLMSettings.from_env().provider == "openai"
+    assert llm.LLMSettings.from_env("slow").provider == "openai"
     monkeypatch.setenv("ANTHROPIC_API_KEY", "y")
-    assert llm.LLMSettings.from_env().provider == "anthropic"
+    assert llm.LLMSettings.from_env("slow").provider == "anthropic"
+    assert not llm.configured("fast")
+    # a Jev key turns fast mode on
+    monkeypatch.setenv("TYPESAFE_API_KEY", "t")
+    assert llm.LLMSettings.from_env("fast").provider == "jev"
+    # other fast providers only when chosen explicitly
     monkeypatch.setenv("FISHBOWL_LLM", "ollama")
-    s = llm.LLMSettings.from_env()
+    s = llm.LLMSettings.from_env("fast")
     assert s.provider == "ollama" and s.price_in == 0.0
     monkeypatch.setenv("FISHBOWL_LLM", "bogus")
     with pytest.raises(llm.LLMError):
@@ -151,6 +161,9 @@ def test_roles(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "a")
     fast, slow = llm.LLMSettings.from_env("fast"), llm.LLMSettings.from_env("slow")
     assert (fast.provider, fast.model) == ("jev", "jev-latest")
+    monkeypatch.delenv("TYPESAFE_API_KEY")
+    assert not llm.configured("fast")  # no Jev, no fast mode, even with an Anthropic key
+    monkeypatch.setenv("TYPESAFE_API_KEY", "t")
     assert (slow.provider, slow.model) == ("anthropic", "claude-sonnet-5-5")
     monkeypatch.setenv("FISHBOWL_SLOW", "jev")
     with pytest.raises(llm.LLMError, match="fast executor"):
