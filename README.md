@@ -198,7 +198,7 @@ Run the same task suite against a **real** model: `python examples/live_eval.py`
 
 ## FAQ
 
-**Does it work on Intel Macs?** Yes. Lima picks the right Debian image for Apple Silicon and Intel.
+**Does it work on Intel Macs?** It should, but this is not verified yet. On Intel Macs, `fishbowl up` uses QEMU (`brew install qemu`), because Apple's Virtualization.framework did not boot the VM in our tests. Apple Silicon is the main target.
 
 **Where do logins persist?** In the VM's Chromium profile, so you log in once by handoff and stay logged in.
 
