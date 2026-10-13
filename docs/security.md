@@ -7,8 +7,9 @@ fishbowl assumes the agent driving it can be wrong, confused, or manipulated by 
 
 | Layer | What stops what |
 |---|---|
-| VM | The agent runs in a Lima VM, not on your Mac. A broken or hijacked session can trash the VM; `fishbowl destroy --yes && fishbowl up` resets it. |
+| VM | The agent runs in a Lima VM (macOS, Linux) or a WSL2 distro (Windows), not on your machine. A broken or hijacked session can trash the VM; `fishbowl destroy --yes && fishbowl up` resets it. |
 | Files | The only host folder mounted into the VM is `~/vc/workspace` (at `/workspace`). Your home folder, SSH keys and browser profiles are not visible. |
+| Windows (WSL2) | WSL can normally see every Windows drive and start Windows programs. fishbowl writes `/etc/wsl.conf` with `[automount] enabled=false` and `[interop] enabled=false`, mounts only `~\vc\workspace` (via `/etc/fstab`), and runs the desktop and every command as the unprivileged `fishbowl` user. WSL2 forwards ports to `localhost` only. |
 | Network | CDP (9222) and noVNC (6080) are forwarded to `127.0.0.1` only. Every other guest port is explicitly ignored, so nothing in the VM is reachable from your LAN. The viewer/control server binds `127.0.0.1` and rejects cross-origin writes. |
 | Typing | Card numbers (Luhn-validated) and API keys/tokens (Anthropic, OpenAI, AWS, GitHub, Slack, Google, GitLab, private keys, JWTs) are refused by `computer`, `browser_type`, `clipboard_set`, `chat_ask` and `browser_run`, regardless of what the plan says. |
 | Clipboard | Bridged in memory over `limactl shell`; nothing is written to disk. VM → Mac always flows. Mac → VM only flows while the human controls the screen (a `handoff` or Pause), so passwords copied on your Mac never reach the VM while the agent drives. When control returns, the VM clipboard is cleared if it still holds Mac content. `clipboard_get` redacts card numbers and API keys. |

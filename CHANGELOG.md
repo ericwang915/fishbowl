@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Platforms
+- **Windows 10/11 (x64 and ARM)** through a WSL2 backend: `fishbowl up` creates a Debian distro, turns off drive automount and Windows interop, mounts only the workspace, enables systemd, and installs the same desktop. The host clipboard works via the Win32 API.
+- **macOS on Apple Silicon and Intel**, and **Linux**, through Lima. QEMU guests (Intel Macs, Linux) use sshfs mounts.
+- One set of provisioning scripts for both backends. `fishbowl doctor` and `status` show the detected host and backend. `fishbowl install` knows Claude Desktop's config path on each OS.
+- **The real VM now boots in CI** (Lima + KVM on Linux) and passes live tests. The suite also runs on macOS Apple Silicon, macOS Intel and Windows.
+- Fixed: pixel coordinates for `computer` are measured with a real pointer move instead of estimated (the estimate was off by the window frame in the VM); background tabs are no longer throttled; screenshots taken in the same clock tick no longer overwrite each other (Windows).
+
 ### Security
 - **Clipboard bridge rewritten: in memory, never on disk.** Older versions mirrored the clipboard through a plaintext file in `~/vc/workspace/.fishbowl/`, where a password pasted during a login could stay, readable by the agent. Now a long-lived `limactl shell` pipe carries it. Mac → VM only flows while the human controls the screen (handoff or Pause), and the VM clipboard is wiped when control returns. The legacy file and VM service are removed automatically. `clipboard_get` redacts card numbers and API keys.
 

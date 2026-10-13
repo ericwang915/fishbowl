@@ -11,7 +11,7 @@
 
 **Give your AI agent its own computer, and watch everything it does.**
 
-A sandboxed Linux desktop on your Mac that Claude Code, Codex, Claude Desktop or Cursor drive through 25 MCP tools.
+A sandboxed Linux desktop on your Mac or Windows PC that Claude Code, Codex, Claude Desktop or Cursor drive through 25 MCP tools.
 <br>You watch it live, pause it with one click, and take over for logins. Optional **fast mode**: Claude plans, and [Jev](https://github.com/browser-use/jev-ultrafast) executes each click.
 
 **English** · [简体中文](README.zh-CN.md)
@@ -41,13 +41,15 @@ A sandboxed Linux desktop on your Mac that Claude Code, Codex, Claude Desktop or
 <br>
 
 > [!NOTE]
-> **v0.1, early.** All 25 tools, `browser_run` and the desktop stack are tested in CI. The Lima VM template has not yet
-> been verified end to end on a Mac, and live runs against Jev are pending. [Reports from your machine](https://github.com/ericwang915/fishbowl/issues/new/choose) are very welcome.
+> **v0.1, early.** In CI, `fishbowl up` boots the real VM (Lima + KVM on Linux) and live tests pass against it: screenshots,
+> pixel clicks, Unicode typing, clipboard, isolation, `browser_run`. The test suite also runs on macOS (Apple Silicon and Intel)
+> and Windows. Not yet run: the VM on a physical Mac, WSL on Windows, and live Jev calls. [Reports from your machine](https://github.com/ericwang915/fishbowl/issues/new/choose) are very welcome.
 
 <details>
 <summary><b>Table of contents</b></summary>
 
 - [Quick start](#-quick-start)
+- [Platforms](#-platforms)
 - [What can it do?](#-what-can-it-do)
 - [Why fishbowl?](#-why-fishbowl)
 - [Fast mode: Claude plans, Jev executes](#-fast-mode-claude-plans-jev-executes)
@@ -62,10 +64,13 @@ A sandboxed Linux desktop on your Mac that Claude Code, Codex, Claude Desktop or
 
 ## 🚀 Quick start
 
-**1. Install Lima and fishbowl** (macOS, Apple Silicon recommended)
+**1. Install the VM runtime**, then fishbowl
+
+| macOS (Apple Silicon or Intel) | Windows 10/11 (x64 or ARM) | Linux |
+|---|---|---|
+| `brew install lima`<br>Intel Macs also: `brew install qemu` | `wsl --install` in an admin PowerShell, reboot<br>(WSL 2.4.4+; update with `wsl --update`) | [Lima](https://lima-vm.io/docs/installation/) + QEMU/KVM |
 
 ```bash
-brew install lima
 pip install git+https://github.com/ericwang915/fishbowl
 ```
 
@@ -98,8 +103,21 @@ All good.
 
 > *Use fishbowl to open news.ycombinator.com and summarise the top 3 posts.*
 
-A tab opens on your Mac with the VM's screen, and you watch the agent work. **No API key is needed.** To turn on
+A tab opens in your browser with the VM's screen, and you watch the agent work. **No API key is needed.** To turn on
 [fast mode](#-fast-mode-claude-plans-jev-executes), set `export TYPESAFE_API_KEY=…` and reconnect the MCP server.
+
+## 💻 Platforms
+
+One desktop (Debian 12, Xvfb 1280×800, Chromium, noVNC), provisioned by the same scripts everywhere:
+
+| Host | VM | Isolation | Verified |
+|---|---|---|---|
+| **macOS · Apple Silicon** | Lima + Apple Virtualization (`vz`, virtiofs) | only `~/vc/workspace` mounted; ports on 127.0.0.1 | test suite in CI; VM boot not yet |
+| **macOS · Intel** | Lima + QEMU | same | test suite in CI; VM boot not yet |
+| **Windows 10/11 · x64 (Intel / AMD) or ARM** | WSL2 distro with systemd | no Windows drives (only the workspace via fstab), no Windows interop, unprivileged user | test suite in CI (x64); WSL boot not yet |
+| **Linux · x86_64 / arm64** | Lima + QEMU/KVM (sshfs mount) | same as macOS | ✅ **VM boot + live tests in CI** |
+
+`fishbowl doctor` shows which host and backend it detected.
 
 ## 💡 What can it do?
 
@@ -195,8 +213,8 @@ export FISHBOWL_FAST=openai OPENAI_BASE_URL=https://openrouter.ai/api/v1 FISHBOW
 <tr><td width="50%" valign="top">
 
 ### 🔒 Isolated and local-first
-- Lima VM: Debian 12, a 1280×800 desktop, Chromium and a shell
-- The only shared folder is `~/vc/workspace`
+- Lima VM (macOS, Linux) or WSL2 (Windows): Debian 12, a 1280×800 desktop, Chromium and a shell
+- The only shared folder is `~/vc/workspace`; on Windows, drives and Windows programs are switched off
 - Ports are bound to **127.0.0.1**, and every other guest port is ignored
 - Append-only audit log of every action, with secrets redacted
 - Screenshots are kept for 7 days
@@ -290,14 +308,14 @@ flowchart LR
     S --> L["audit log + screenshots · ~/vc"]
     V["viewer · 127.0.0.1:6090<br/>Pause · Handoff"] --- S
   end
-  subgraph VM["Lima VM · Debian 12"]
+  subgraph VM["Lima VM or WSL2 · Debian 12"]
     X["Xvfb 1280×800 + openbox"]
     C["Chromium"]
     N["x11vnc → noVNC"]
     D["xdotool · xclip · shell"]
   end
   S -- "CDP · 127.0.0.1:9222" --> C
-  S -- "limactl shell" --> D
+  S -- "limactl shell / wsl.exe" --> D
   V -- "noVNC · 127.0.0.1:6080" --> N
   W["~/vc/workspace"] <-- "only shared folder" --> VM
 ```
@@ -320,9 +338,11 @@ Everything works with the defaults. Set these environment variables to change be
 | `FISHBOWL_HOME` | `~/vc` | Workspace, audit log, screenshots and state |
 | `FISHBOWL_SCREENSHOT_DAYS` | `7` | Screenshot retention |
 | `FISHBOWL_AUTO_OPEN` | `1` | Open the live viewer on the first action |
-| `FISHBOWL_VM` | `fishbowl` | Lima instance name |
+| `FISHBOWL_VM` | `fishbowl` | Lima instance / WSL distro name |
+| `FISHBOWL_VM_TYPE` | `vz` (Apple Silicon), `qemu` (Intel, Linux) | Force a Lima VM type |
+| `FISHBOWL_MOUNT_TYPE` | `virtiofs` (vz), `reverse-sshfs` (QEMU) | Force a Lima mount type |
 | `FISHBOWL_CDP_PORT` / `FISHBOWL_NOVNC_PORT` / `FISHBOWL_CONTROL_PORT` | `9222` / `6080` / `6090` | Local ports, all on 127.0.0.1 |
-| `FISHBOWL_EXECUTOR` | `lima` | `local` runs commands on this host (Linux, CI) |
+| `FISHBOWL_EXECUTOR` | `lima` (macOS, Linux), `wsl` (Windows) | `local` runs commands on this host (CI) |
 
 <details><summary><b>CLI reference</b></summary>
 
@@ -338,8 +358,9 @@ fishbowl mcp                                run the MCP server on stdio
 
 ## ✅ Tested
 
-**138 tests on real headless Chrome**, plus **7 on a live X desktop** in CI, across Python 3.10 and 3.12 and MCP SDK
-1.x and 2.x. No VM or API key is needed to run them:
+**170+ tests on real headless Chrome** on Linux, macOS (Apple Silicon and Intel) and Windows, across Python 3.10 and 3.12
+and MCP SDK 1.x and 2.x. CI also runs a live X desktop, and **boots the real VM** with `fishbowl up` and tests against it.
+No VM or API key is needed to run the suite:
 
 ```bash
 pip install -e ".[dev]" && pytest
@@ -353,7 +374,9 @@ pip install -e ".[dev]" && pytest
 | Handback paths | no change ×3 · login wall · guard refusal · human approval · secret in plan · pause · low confidence · timeout · an answer outside the offered options |
 | Fast + slow thinking | goal-only planning · replanning · the planner asking for missing info · `DONE` rejected by verification · stale decisions re-decided · fast mode off without Jev |
 | Providers | Jev `systemone` (multiple choice, retry on overload, invalid choices rejected) · enum-constrained Anthropic, OpenAI and Ollama |
+| Real VM (CI) | `fishbowl up` on Lima + KVM, then: 1280×800 screenshots · pixel clicks (measured offset) · Unicode typing · clipboard · unprivileged user · only the workspace shared · only CDP and noVNC forwarded · `browser_run` |
 | Live desktop (CI) | screenshots · pixel clicks landing on elements · Unicode typing · the clipboard bridge with real xclip |
+| Platforms | host detection · Lima on Apple Silicon / Intel / Linux · WSL isolation config and setup sequence · provisioning scripts parse · per-OS client paths · Windows clipboard |
 | Guard | keyword fallback: 100% recall and 0% false blocks on 30 labelled actions plus a 10-action holdout · secret and card detection |
 | MCP clients | a real stdio handshake (spawn, list 25 tools, call them) · `fishbowl install` merging, idempotency and removal for all four clients |
 </details>
@@ -424,23 +447,31 @@ live takeover, an approval guard and an audit log, and borrows jev-ultrafast's e
 mode.
 </details>
 
-<details><summary><b>Apple Silicon or Intel?</b></summary>
+<details><summary><b>Which computers does it run on?</b></summary>
 
-Apple Silicon is the main target. On Intel Macs, `fishbowl up` uses QEMU (`brew install qemu`), because Apple's
-Virtualization.framework did not boot the VM in our testing.
+macOS on Apple Silicon or Intel, Windows 10/11 on x64 (Intel or AMD) or ARM, and Linux. See [Platforms](#-platforms) for
+what each uses and what has been verified. On Intel Macs, `fishbowl up` uses QEMU, because Apple's Virtualization.framework
+did not boot the VM in our testing.
 </details>
 
-<details><summary><b>Linux host?</b></summary>
+<details><summary><b>Why WSL2 on Windows, and is it isolated?</b></summary>
 
-Start the desktop stack with `scripts/desktop-services.sh`, then run with `FISHBOWL_EXECUTOR=local`. The CI desktop
-job does exactly this.
+WSL2 is a real Linux VM that ships with Windows. By default it can see every drive and start Windows programs, so
+fishbowl turns both off in `/etc/wsl.conf`, mounts only `~\vc\workspace`, and runs the desktop as an unprivileged user.
+</details>
+
+<details><summary><b>Can I skip the VM?</b></summary>
+
+On Linux, start the desktop with `scripts/desktop-services.sh` and run with `FISHBOWL_EXECUTOR=local`. The CI desktop job
+does exactly this. You lose the VM's isolation.
 </details>
 
 <p align="right"><a href="#readme-top">back to top ↑</a></p>
 
 ## 🧭 Roadmap
 
-- [ ] Verified first boot on Apple Silicon and Intel, and a prebuilt image for faster setup
+- [x] Real VM boot verified in CI (Linux + KVM)
+- [ ] Verified first boot on Apple Silicon, Intel Macs and WSL, and a prebuilt image for faster setup
 - [ ] Published `browser_run` benchmark on Jev and local models
 - [ ] Session recording (MP4) next to the audit log
 - [ ] Egress allow-list for the VM
@@ -470,7 +501,7 @@ PRs are welcome, especially new `browser_run` task pages, and guard or chat phra
 
 The fast path adapts ideas from [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) (MIT): the
 indexed per-operation action space, the single observation call, freshness checks before input, and independent
-`DONE` verification. Built on [Lima](https://github.com/lima-vm/lima), [noVNC](https://github.com/novnc/noVNC), and the
+`DONE` verification. Built on [Lima](https://github.com/lima-vm/lima), [WSL](https://github.com/microsoft/WSL), [noVNC](https://github.com/novnc/noVNC), and the
 [Model Context Protocol](https://modelcontextprotocol.io).
 
 <br>

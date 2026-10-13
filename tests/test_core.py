@@ -26,6 +26,8 @@ def test_screenshot_retention():
     os.utime(old, (time.time() - 8 * 86400,) * 2)
     new = audit.save_screenshot(b"\x89PNG new")
     assert not old.exists() and new.exists()
+    burst = {audit.save_screenshot(b"\x89PNG") for _ in range(20)}
+    assert len(burst) == 20  # rapid screenshots never overwrite each other
 
 
 # ----------------------------------------------------------------- control

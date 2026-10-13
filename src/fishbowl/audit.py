@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -54,7 +55,8 @@ def tail(n: int = 50) -> list[dict[str, Any]]:
 def save_screenshot(png: bytes) -> Path:
     cfg = get_config()
     cfg.screenshot_dir.mkdir(parents=True, exist_ok=True)
-    path = cfg.screenshot_dir / f"{datetime.now():%Y%m%d-%H%M%S-%f}.png"
+    # Unique even when the clock is coarse (Windows ticks ~15 ms): never overwrite an earlier screenshot.
+    path = cfg.screenshot_dir / f"{datetime.now():%Y%m%d-%H%M%S-%f}-{uuid.uuid4().hex[:6]}.png"
     path.write_bytes(png)
     prune_screenshots()
     return path

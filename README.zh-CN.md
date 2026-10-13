@@ -11,7 +11,7 @@
 
 **给你的 AI 智能体一台自己的电脑，它做的每一步你都看得见。**
 
-一台跑在你 Mac 上的隔离 Linux 桌面，Claude Code、Codex、Claude Desktop 或 Cursor 通过 25 个 MCP 工具来操作它。
+一台跑在你 Mac 或 Windows 电脑上的隔离 Linux 桌面，Claude Code、Codex、Claude Desktop 或 Cursor 通过 25 个 MCP 工具来操作它。
 <br>你可以实时观看、一键暂停、遇到登录时接管。可选的**快速模式**：Claude 负责规划，[Jev](https://github.com/browser-use/jev-ultrafast) 负责执行每一次点击。
 
 [English](README.md) · **简体中文**
@@ -41,13 +41,15 @@
 <br>
 
 > [!NOTE]
-> **v0.1，早期版本。** 25 个工具、`browser_run` 和整套桌面组件都在 CI 中测试过。Lima 虚拟机模板还没有在 Mac 上完整验证过，
-> 接入真实 Jev 的测试也还没跑。非常欢迎[反馈你机器上的运行情况](https://github.com/ericwang915/fishbowl/issues/new/choose)。
+> **v0.1，早期版本。** CI 中会用 `fishbowl up` 真实启动虚拟机（Linux 上的 Lima + KVM），并在上面跑通实机测试：截图、
+> 像素点击、Unicode 输入、剪贴板、隔离检查、`browser_run`。测试集也在 macOS（Apple Silicon 和 Intel）和 Windows 上运行。
+> 尚未验证：在实体 Mac 上启动虚拟机、Windows 上的 WSL，以及真实的 Jev 调用。非常欢迎[反馈你机器上的运行情况](https://github.com/ericwang915/fishbowl/issues/new/choose)。
 
 <details>
 <summary><b>目录</b></summary>
 
 - [快速上手](#-快速上手)
+- [支持的平台](#-支持的平台)
 - [能用它做什么？](#-能用它做什么)
 - [为什么选 fishbowl？](#-为什么选-fishbowl)
 - [快速模式：Claude 规划，Jev 执行](#-快速模式claude-规划jev-执行)
@@ -62,10 +64,13 @@
 
 ## 🚀 快速上手
 
-**1. 安装 Lima 和 fishbowl**（macOS，推荐 Apple Silicon）
+**1. 安装虚拟机运行环境**，再安装 fishbowl
+
+| macOS（Apple Silicon 或 Intel） | Windows 10/11（x64 或 ARM） | Linux |
+|---|---|---|
+| `brew install lima`<br>Intel Mac 另需：`brew install qemu` | 在管理员 PowerShell 中运行 `wsl --install` 并重启<br>（需要 WSL 2.4.4+，用 `wsl --update` 升级） | [Lima](https://lima-vm.io/docs/installation/) + QEMU/KVM |
 
 ```bash
-brew install lima
 pip install git+https://github.com/ericwang915/fishbowl
 ```
 
@@ -98,8 +103,21 @@ All good.
 
 > *用 fishbowl 打开 news.ycombinator.com，总结排名前三的帖子。*
 
-你的 Mac 上会弹出一个标签页，显示虚拟机的屏幕，你可以看着智能体干活。**不需要任何 API key。** 想开启
+浏览器里会弹出一个标签页，显示虚拟机的屏幕，你可以看着智能体干活。**不需要任何 API key。** 想开启
 [快速模式](#-快速模式claude-规划jev-执行)，设置 `export TYPESAFE_API_KEY=…` 后重新连接 MCP 服务器即可。
+
+## 💻 支持的平台
+
+所有平台跑的是同一套桌面（Debian 12、Xvfb 1280×800、Chromium、noVNC），由同一份脚本配置：
+
+| 宿主机 | 虚拟机 | 隔离 | 验证情况 |
+|---|---|---|---|
+| **macOS · Apple Silicon** | Lima + Apple 虚拟化框架（`vz`、virtiofs） | 只挂载 `~/vc/workspace`；端口只绑 127.0.0.1 | CI 跑测试集；尚未验证虚拟机启动 |
+| **macOS · Intel** | Lima + QEMU | 同上 | CI 跑测试集；尚未验证虚拟机启动 |
+| **Windows 10/11 · x64（Intel / AMD）或 ARM** | 开启 systemd 的 WSL2 发行版 | 不挂载 Windows 磁盘（只通过 fstab 挂工作区）、禁止调用 Windows 程序、非特权用户 | CI 跑测试集（x64）；尚未验证 WSL 启动 |
+| **Linux · x86_64 / arm64** | Lima + QEMU/KVM（sshfs 挂载） | 同 macOS | ✅ **CI 中真实启动虚拟机并通过实机测试** |
+
+`fishbowl doctor` 会显示识别到的宿主机和所用后端。
 
 ## 💡 能用它做什么？
 
@@ -192,8 +210,8 @@ export FISHBOWL_FAST=openai OPENAI_BASE_URL=https://openrouter.ai/api/v1 FISHBOW
 <tr><td width="50%" valign="top">
 
 ### 🔒 隔离、本地优先
-- Lima 虚拟机：Debian 12、1280×800 桌面、Chromium 和 shell
-- 唯一共享的文件夹是 `~/vc/workspace`
+- Lima 虚拟机（macOS、Linux）或 WSL2（Windows）：Debian 12、1280×800 桌面、Chromium 和 shell
+- 唯一共享的文件夹是 `~/vc/workspace`；在 Windows 上，磁盘挂载和调用 Windows 程序都被关闭
 - 端口只绑定 **127.0.0.1**，其他端口一律不转发
 - 每个动作都写进只追加的审计日志，敏感信息自动遮蔽
 - 截图保留 7 天
@@ -285,14 +303,14 @@ flowchart LR
     S --> L["审计日志 + 截图 · ~/vc"]
     V["实时画面 · 127.0.0.1:6090<br/>暂停 · 交接"] --- S
   end
-  subgraph VM["Lima 虚拟机 · Debian 12"]
+  subgraph VM["Lima 虚拟机或 WSL2 · Debian 12"]
     X["Xvfb 1280×800 + openbox"]
     C["Chromium"]
     N["x11vnc → noVNC"]
     D["xdotool · xclip · shell"]
   end
   S -- "CDP · 127.0.0.1:9222" --> C
-  S -- "limactl shell" --> D
+  S -- "limactl shell / wsl.exe" --> D
   V -- "noVNC · 127.0.0.1:6080" --> N
   W["~/vc/workspace"] <-- "唯一共享文件夹" --> VM
 ```
@@ -315,9 +333,11 @@ flowchart LR
 | `FISHBOWL_HOME` | `~/vc` | 工作区、审计日志、截图和状态文件的位置 |
 | `FISHBOWL_SCREENSHOT_DAYS` | `7` | 截图保留天数 |
 | `FISHBOWL_AUTO_OPEN` | `1` | 第一次操作时自动打开实时画面 |
-| `FISHBOWL_VM` | `fishbowl` | Lima 实例名 |
+| `FISHBOWL_VM` | `fishbowl` | Lima 实例名 / WSL 发行版名 |
+| `FISHBOWL_VM_TYPE` | `vz`（Apple Silicon）、`qemu`（Intel、Linux） | 强制指定 Lima 虚拟机类型 |
+| `FISHBOWL_MOUNT_TYPE` | `virtiofs`（vz）、`reverse-sshfs`（QEMU） | 强制指定 Lima 挂载方式 |
 | `FISHBOWL_CDP_PORT` / `FISHBOWL_NOVNC_PORT` / `FISHBOWL_CONTROL_PORT` | `9222` / `6080` / `6090` | 本地端口，全部在 127.0.0.1 |
-| `FISHBOWL_EXECUTOR` | `lima` | 设为 `local` 时在本机执行命令（Linux、CI） |
+| `FISHBOWL_EXECUTOR` | `lima`（macOS、Linux）、`wsl`（Windows） | 设为 `local` 时在本机执行命令（CI） |
 
 <details><summary><b>命令行参考</b></summary>
 
@@ -333,8 +353,8 @@ fishbowl mcp                                以 stdio 方式运行 MCP 服务器
 
 ## ✅ 测试
 
-**138 个测试跑在真实的无头 Chrome 上**，另有 **7 个在 CI 的真实 X 桌面上运行**，覆盖 Python 3.10 和 3.12、MCP SDK 1.x 和 2.x。
-跑测试不需要虚拟机，也不需要 API key：
+**170 多个测试跑在真实的无头 Chrome 上**，覆盖 Linux、macOS（Apple Silicon 和 Intel）和 Windows，以及 Python 3.10/3.12、
+MCP SDK 1.x/2.x。CI 还会运行真实的 X 桌面，并用 `fishbowl up` **真实启动虚拟机**进行测试。跑测试集不需要虚拟机，也不需要 API key：
 
 ```bash
 pip install -e ".[dev]" && pytest
@@ -348,7 +368,9 @@ pip install -e ".[dev]" && pytest
 | 交还场景 | 连续 3 次没变化 · 登录墙 · 护栏拒绝 · 人工批准 · 计划里有密钥 · 暂停 · 置信度低 · 超时 · 回答不在给定选项里 |
 | 快慢思考 | 只给目标时自动规划 · 重新规划 · 规划模型索要缺失信息 · `DONE` 被验证驳回 · 过期决策重新决策 · 没配 Jev 时快速模式关闭 |
 | 模型接口 | Jev `systemone`（多选题、过载重试、拒绝非法选项）· Anthropic、OpenAI、Ollama 的枚举约束 |
+| 真实虚拟机（CI） | 在 Lima + KVM 上 `fishbowl up`，然后测：1280×800 截图 · 像素点击（实测偏移）· Unicode 输入 · 剪贴板 · 非特权用户 · 只共享工作区 · 只转发 CDP 和 noVNC · `browser_run` |
 | 真实桌面（CI） | 截图 · 像素点击准确落在元素上 · Unicode 输入 · 用真实 xclip 测剪贴板桥 |
+| 平台 | 宿主机识别 · Apple Silicon / Intel / Linux 上的 Lima · WSL 隔离配置和创建流程 · 配置脚本语法检查 · 各系统客户端路径 · Windows 剪贴板 |
 | 护栏 | 关键词规则：30 条标注动作加 10 条留出集上召回率 100%、误拦 0% · 密钥和卡号识别 |
 | MCP 客户端 | 真实的 stdio 握手（启动、列出 25 个工具、调用）· 四种客户端的 `fishbowl install` 合并、重复安装、卸载 |
 </details>
@@ -414,22 +436,30 @@ fishbowl 是给你正在用的智能体接入的 MCP 服务器，而不是一个
 审批护栏和审计日志，可选的快速模式借鉴了 jev-ultrafast 的执行方法。
 </details>
 
-<details><summary><b>Apple Silicon 还是 Intel？</b></summary>
+<details><summary><b>支持哪些电脑？</b></summary>
 
-主要面向 Apple Silicon。在 Intel Mac 上，`fishbowl up` 会改用 QEMU（`brew install qemu`），因为我们测试时 Apple 的
-Virtualization.framework 没能启动虚拟机。
+macOS（Apple Silicon 或 Intel）、Windows 10/11（x64 的 Intel/AMD 处理器，或 ARM），以及 Linux。各平台用的技术和验证情况见
+[支持的平台](#-支持的平台)。在 Intel Mac 上，`fishbowl up` 会改用 QEMU，因为我们测试时 Apple 的 Virtualization.framework 没能启动虚拟机。
 </details>
 
-<details><summary><b>Linux 主机能用吗？</b></summary>
+<details><summary><b>Windows 上为什么用 WSL2？隔离吗？</b></summary>
 
-用 `scripts/desktop-services.sh` 启动桌面组件，然后设置 `FISHBOWL_EXECUTOR=local` 运行。CI 的桌面任务就是这么做的。
+WSL2 是 Windows 自带的真实 Linux 虚拟机。它默认能看到所有磁盘、能调用 Windows 程序，所以 fishbowl 在 `/etc/wsl.conf` 里把这两项都关掉，
+只挂载 `~\vc\workspace`，并用非特权用户运行桌面。
+</details>
+
+<details><summary><b>能不用虚拟机吗？</b></summary>
+
+在 Linux 上可以：用 `scripts/desktop-services.sh` 启动桌面，再设置 `FISHBOWL_EXECUTOR=local` 运行，CI 的桌面任务就是这么做的。
+代价是失去虚拟机的隔离。
 </details>
 
 <p align="right"><a href="#readme-top">回到顶部 ↑</a></p>
 
 ## 🧭 路线图
 
-- [ ] 在 Apple Silicon 和 Intel 上验证首次启动，并提供预构建镜像加快安装
+- [x] 在 CI 中验证真实虚拟机启动（Linux + KVM）
+- [ ] 在 Apple Silicon、Intel Mac 和 WSL 上验证首次启动，并提供预构建镜像加快安装
 - [ ] 发布 `browser_run` 在 Jev 和本地模型上的基准测试
 - [ ] 在审计日志旁边保存会话录像（MP4）
 - [ ] 虚拟机出网白名单
@@ -458,7 +488,7 @@ Virtualization.framework 没能启动虚拟机。
 ## 🙏 致谢
 
 快速路径借鉴了 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)（MIT）的做法：按操作分组的索引动作空间、
-一次调用完成观察、动手前的新鲜度检查，以及独立的 `DONE` 验证。基于 [Lima](https://github.com/lima-vm/lima)、
+一次调用完成观察、动手前的新鲜度检查，以及独立的 `DONE` 验证。基于 [Lima](https://github.com/lima-vm/lima)、[WSL](https://github.com/microsoft/WSL)、
 [noVNC](https://github.com/novnc/noVNC) 和 [Model Context Protocol](https://modelcontextprotocol.io) 构建。
 
 <br>

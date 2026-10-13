@@ -7,6 +7,7 @@ The controller keeps one *working tab*. Tabs the site opens on its own
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -204,7 +205,12 @@ class BrowserController:
                 await move_mouse(x + dx, y + dx)
         except Exception:
             return None
-        got = await self.eval(dom_js.CALIBRATE_READ)
+        got = None
+        for _ in range(20):  # the X event reaches the page asynchronously
+            got = await self.eval(dom_js.CALIBRATE_READ)
+            if got:
+                break
+            await asyncio.sleep(0.05)
         if not got:
             return None
         offset = (x - round(got[0]), y - round(got[1]))
