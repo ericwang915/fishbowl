@@ -2,7 +2,7 @@
 
 from fishbowl import chat, llm
 
-from .fake_model import fake_llm
+from .fake_model import use_fake
 
 
 async def test_chat_ask_answered(browser, page_server):
@@ -67,7 +67,7 @@ async def test_judge_no_reply_skips_model():
 
 
 async def test_judge_uses_model():
-    llm.set_override(fake_llm)
+    use_fake(llm)
     r = await chat.judge_reply("Where is order 1042?", "Order #1042 ships Friday.", label="answered")
     assert r["source"] == "model" and r["cites_store_data"] is True
     assert llm.stats()["by_purpose"]["judge"]["calls"] == 1

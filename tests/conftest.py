@@ -35,7 +35,16 @@ def _free_port() -> int:
 
 @pytest.fixture(autouse=True)
 def fishbowl_home(tmp_path, monkeypatch):
-    for k in ("FISHBOWL_LLM", "FISHBOWL_MODEL", "FISHBOWL_GUARD", "FISHBOWL_PRICE_IN", "FISHBOWL_PRICE_OUT"):
+    for k in (
+        "FISHBOWL_LLM",
+        "FISHBOWL_MODEL",
+        "FISHBOWL_FAST",
+        "FISHBOWL_SLOW",
+        "FISHBOWL_GUARD",
+        "FISHBOWL_PRICE_IN",
+        "FISHBOWL_PRICE_OUT",
+        "TYPESAFE_API_KEY",
+    ):
         monkeypatch.delenv(k, raising=False)
     cfg = config.Config(home=tmp_path / "vc", executor="local", auto_open_viewer=False, control_port=_free_port())
     config.set_config(cfg)
@@ -43,6 +52,7 @@ def fishbowl_home(tmp_path, monkeypatch):
     yield cfg
     control.stop_server()
     llm.set_override(None)
+    llm.set_choice_override(None)
 
 
 @pytest.fixture(scope="session")

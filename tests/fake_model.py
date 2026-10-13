@@ -1,8 +1,8 @@
-"""A deterministic stand-in for the decision model.
+"""A deterministic stand-in for the fast and slow models.
 
-It reads the same prompts the real model gets (element table, overlays, step goal)
-and answers with simple rules, so the execution engine can be tested end to end
-in CI with no API key and no network.
+It reads the same multiple-choice questions the real fast model gets (operations, per-operation
+target heads, visible page text) and answers with simple rules, so the execution engine can be
+tested end to end in CI with no API key and no network.
 """
 
 import re
@@ -10,101 +10,121 @@ import re
 from fishbowl import guard
 
 
-def _parse(prompt: str):
-    goal = re.search(r"STEP \d+/\d+: (.*)", prompt).group(1)
-    text_m = re.search(r"Prepared text for this step: (.*)", prompt)
-    has_text = text_m and text_m.group(1) != "(none)"
-    els = []
-    for line in prompt.split("ELEMENTS:\n", 1)[1].splitlines():
-        m = re.match(r'\[(\d+)\] (\S+) "(.*?)"(.*)', line)
-        if m:
-            els.append({"id": int(m.group(1)), "role": m.group(2), "name": m.group(3), "rest": m.group(4)})
-    ov = re.findall(r"dismiss=\[\{'id': (\d+)", prompt)
-    hist = re.search(r"Previous actions this step: (.*)", prompt).group(1)
-    return goal, has_text, els, ov, hist
-
-
 def _quoted(goal: str) -> str | None:
     m = re.search(r"'([^']+)'", goal)
     return m.group(1).lower() if m else None
 
 
-def decide(prompt: str) -> dict:
-    goal, has_text, els, overlays, hist = _parse(prompt)
+def _pick(criteria: dict, needle: str | None):
+    if not needle:
+        return None
+    return next((k for k, v in criteria.items() if needle in v.lower()), None)
+
+
+def decide(state: dict, q: dict) -> dict:
+    goal = state["step"]
     g = goal.lower()
     target = _quoted(goal)
-    if overlays and "accept" not in hist.lower():
-        return {"action": "click", "element": int(overlays[0]), "confidence": 0.9, "reason": "dismiss overlay"}
+    ops = q["operation"]["criteria"]
+    click = q.get("click_target", {}).get("criteria", {})
+    typ = q.get("type_target", {}).get("criteria", {})
+    sel = q.get("select_target", {}).get("criteria", {})
+    history = " ".join(str(h.get("action", "")) for h in state["recent_actions"]).lower()
+    dflt = {k: next(iter(v["criteria"])) for k, v in q.items() if k != "operation"}  # every head is answered
+
+    def answer(op, conf=0.9, **chosen):
+        out = {"operation": {"choice": op, "confidence": conf}}
+        for k, v in {**dflt, **chosen}.items():
+            out[k] = {"choice": v, "confidence": conf}
+        return out
+
+    overlays = state["overlays"]
+    if overlays and overlays[0]["dismiss"] and "accept" not in history and "reject" not in history:
+        return answer("CLICK", click_target=str(overlays[0]["dismiss"][0]["id"]))
     if g.startswith("give up"):
-        return {"action": "handback", "element": 0, "confidence": 0.9, "reason": "asked to give up"}
-    if g.startswith(("type", "search", "enter")) and has_text:
-        box = next(
-            (e for e in els if e["role"] in ("textbox", "searchbox") and (not target or target in e["name"].lower())),
-            None,
-        )
-        if box:
-            return {
-                "action": "type",
-                "element": box["id"],
-                "submit": "submit" in g or g.startswith("search"),
-                "confidence": 0.9,
-                "reason": "type prepared text",
-            }
-    if g.startswith("select"):
-        opt = re.search(r"select '([^']+)'", goal).group(1)
-        box = next((e for e in els if e["role"] == "combobox"), None)
-        if box and opt.lower() in box["rest"].lower().split("options=")[0]:
-            return {"action": "done", "element": 0, "confidence": 0.9, "reason": "already selected"}
-        if box:
-            return {"action": "select", "element": box["id"], "option": opt, "confidence": 0.9, "reason": "select"}
-    if g.startswith("wait"):
-        if target and any(target in e["name"].lower() for e in els):
-            return {"action": "done", "element": 0, "confidence": 0.9, "reason": "appeared"}
-        sc = re.search(r"scroll (\d+)/(\d+)", prompt)
-        if sc and int(sc.group(1)) < int(sc.group(2)):
-            return {"action": "scroll_down", "element": 0, "confidence": 0.8, "reason": "maybe below"}
-        return {"action": "wait", "element": 0, "confidence": 0.9, "reason": "loading"}
-    if target:
-        hit = next((e for e in els if target in e["name"].lower()), None)
-        if hit:
-            if "checked=true" in hit["rest"]:
-                return {"action": "done", "element": 0, "confidence": 0.9, "reason": "already checked"}
-            return {"action": "click", "element": hit["id"], "confidence": 0.9, "reason": f"click {target}"}
-        sc = re.search(r"scroll (\d+)/(\d+)", prompt)
-        if sc and int(sc.group(1)) < int(sc.group(2)):
-            return {"action": "scroll_down", "element": 0, "confidence": 0.8, "reason": "look further down"}
-        return {"action": "wait", "element": 0, "confidence": 0.8, "reason": "maybe still loading"}
+        return answer("BLOCKED")
     if "low confidence" in g:
-        return {"action": "click", "element": els[0]["id"] if els else 0, "confidence": 0.1, "reason": "unsure"}
-    return {"action": "handback", "element": 0, "confidence": 0.5, "reason": "no matching element"}
+        return answer("CLICK", conf=0.1)
+    if "TYPE_TEXT" in ops and g.startswith(("type", "search", "enter", "fill")):
+        box = _pick(typ, target) or next(iter(typ))
+        submit = "yes" if ("submit" in g or g.startswith("search")) else "no"
+        return answer("TYPE_TEXT", type_target=box, submit_after_typing=submit)
+    if g.startswith("select") and sel:
+        opt = re.search(r"select '([^']+)'", goal).group(1).lower()
+        key = next(k for k, v in sel.items() if v.lower().split("→ ", 1)[1].startswith(opt))
+        if "(current)" in sel[key]:
+            return answer("DONE")
+        return answer("SELECT", select_target=key)
+    if g.startswith("wait"):
+        if _pick(click, target):
+            return answer("DONE")
+        return answer("SCROLL_DOWN" if "SCROLL_DOWN" in ops else "WAIT")
+    if target:
+        hit = _pick(click, target)
+        if hit:
+            if "· checked" in click[hit]:
+                return answer("DONE")
+            return answer("CLICK", click_target=hit)
+        return answer("SCROLL_DOWN" if "SCROLL_DOWN" in ops else "WAIT")
+    return answer("BLOCKED", conf=0.5)
 
 
-def check(prompt: str) -> dict:
-    goal = re.search(r"STEP GOAL: (.*)", prompt).group(1)
-    new = prompt.split("NEW TEXT SINCE ACTION:\n", 1)[1]
+def verify(state: dict) -> str:
+    goal = state["step"].lower()
+    seen = (state["page"]["text"] + " " + " ".join(state.get("elements", []))).lower()
     m = re.search(r"expect '([^']+)'", goal)
     if m:
-        return {"done": m.group(1).lower() in new.lower(), "reason": "expectation"}
-    return {"done": "(none)" not in new or "new tab opened" in new or "type" in goal.lower(), "reason": "page changed"}
+        return "yes" if m.group(1).lower() in seen else "no"
+    t = _quoted(goal)
+    return "yes" if not t or t in seen else "no"
 
 
-async def fake_llm(purpose: str, system: str, user: str, schema: dict) -> dict:
+def check(state: dict) -> str:
+    goal = state["step"]
+    new = state["new_text_since_action"]
+    m = re.search(r"expect '([^']+)'", goal)
+    if m:
+        return "yes" if m.group(1).lower() in new.lower() else "no"
+    done = new != "(none)" or state["new_tabs"] or goal.lower().startswith(("type", "fill", "select"))
+    return "yes" if done else "no"
+
+
+async def fake_choose(purpose: str, state: dict, questions: dict) -> dict:
     if purpose == "decide":
-        return decide(user)
+        return decide(state, questions)
+    if purpose == "verify":
+        return {"satisfied": verify(state)}
     if purpose == "check":
-        return check(user)
+        return {"step_done": check(state)}
     if purpose == "guard":
-        m = re.search(r"Action: (\S+)\nTarget element: (.*)\nPage context: (.*)", user, re.S)
-        v = guard.heuristic(m.group(1), m.group(2), m.group(3))
-        return {"needs_approval": v.needs_approval, "category": "other_safe", "reason": v.reason}
+        v = guard.heuristic(state["action"], state["target"], state["page"])
+        return {"category": "payment" if v.needs_approval else "navigation"}
     if purpose == "judge":
         return {
             "reply_type": "answer",
             "detected_language": "en",
-            "language_match": True,
-            "actionable": True,
-            "cites_store_data": "#" in user,
-            "score": 4,
-            "issues": [],
+            "language_match": "yes",
+            "actionable": "yes",
+            "cites_store_data": "yes" if "#" in state["reply"] else "no",
+            "score": "4",
         }
     raise AssertionError(purpose)
+
+
+async def fake_llm(purpose: str, system: str, user: str, schema: dict) -> dict:
+    """decide()-style JSON calls: the slow planner."""
+    if purpose == "plan":
+        goal = re.search(r"GOAL: (.*)", user).group(1)
+        if "needs info" in goal:
+            return {"steps": [], "missing_info": "the user's shipping address"}
+        if goal.startswith("replan:") and "PREVIOUS ATTEMPT FAILED" not in user:
+            # First plan is wrong on purpose; the replan uses the real steps.
+            return {"steps": [{"goal": "click 'no such button'", "text": None}], "missing_info": None}
+        steps = [{"goal": s.strip(), "text": None} for s in goal.removeprefix("replan:").split(" then ")]
+        return {"steps": steps, "missing_info": None}
+    raise AssertionError(purpose)
+
+
+def use_fake(llm_module) -> None:
+    llm_module.set_override(fake_llm)
+    llm_module.set_choice_override(fake_choose)

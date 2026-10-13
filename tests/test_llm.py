@@ -127,3 +127,117 @@ async def test_missing_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(llm.LLMError, match="ANTHROPIC_API_KEY"):
         await llm.decide("decide", "s", "u", SCHEMA)
+
+
+# ------------------------------------------------------------ roles and multiple choice
+
+Q = {
+    "operation": {"criteria": {"CLICK": "click", "DONE": "done"}},
+    "click_target": {"criteria": {"3": "[3] button Search", "7": "[7] link Next"}},
+}
+
+
+def test_roles(monkeypatch):
+    for k in (
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "TYPESAFE_API_KEY",
+        "FISHBOWL_LLM",
+        "FISHBOWL_FAST",
+        "FISHBOWL_SLOW",
+    ):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("TYPESAFE_API_KEY", "t")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "a")
+    fast, slow = llm.LLMSettings.from_env("fast"), llm.LLMSettings.from_env("slow")
+    assert (fast.provider, fast.model) == ("jev", "jev-latest")
+    assert (slow.provider, slow.model) == ("anthropic", "claude-sonnet-5-5")
+    monkeypatch.setenv("FISHBOWL_SLOW", "jev")
+    with pytest.raises(llm.LLMError, match="fast executor"):
+        llm.LLMSettings.from_env("slow")
+    monkeypatch.setenv("FISHBOWL_SLOW", "ollama")
+    monkeypatch.setenv("FISHBOWL_SLOW_MODEL", "qwen3:32b")
+    assert llm.LLMSettings.from_env("slow").model == "qwen3:32b"
+
+
+async def test_jev_choose(monkeypatch, mock_http):
+    monkeypatch.setenv("FISHBOWL_FAST", "jev")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "t")
+    calls = mock_http(
+        lambda r: httpx.Response(200, json={
+            "answers": {
+                "operation": {"choice": "CLICK", "confidence": 0.93, "probabilities": {"CLICK": 0.93, "DONE": 0.07}},
+                "click_target": {"choice": "3", "confidence": 0.88, "probabilities": {"3": 0.88, "7": 0.12}},
+            },
+            "model": "jev-latest", "usage": {"input_tokens": 420, "output_tokens": 6},
+        })
+    )  # fmt: skip
+    a = await llm.choose("decide", {"step": "search"}, Q)
+    assert a["operation"]["choice"] == "CLICK" and a["click_target"] == {
+        "choice": "3", "confidence": 0.88, "probabilities": {"3": 0.88, "7": 0.12}
+    }  # fmt: skip
+    body = json.loads(calls[0].content)
+    assert str(calls[0].url) == "https://api.typesafe.ai/v1/systemone"
+    assert calls[0].headers["authorization"] == "Bearer t"
+    assert body["questions"]["operation"]["type"] == "choice" and body["state"] == {"step": "search"}
+    assert llm.stats()["by_purpose"]["decide"]["in"] == 420
+
+
+async def test_jev_retries_on_overload(monkeypatch, mock_http):
+    monkeypatch.setenv("FISHBOWL_FAST", "jev")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "t")
+    replies = iter(
+        [
+            httpx.Response(529),
+            httpx.Response(
+                200,
+                json={
+                    "answers": {
+                        "operation": {"choice": "DONE", "confidence": 1},
+                        "click_target": {"choice": "7", "confidence": 1},
+                    }
+                },
+            ),
+        ]
+    )
+    calls = mock_http(lambda r: next(replies))  # fmt: skip
+    assert (await llm.choose("decide", {}, Q))["operation"]["choice"] == "DONE"
+    assert len(calls) == 2
+
+
+async def test_choice_outside_options_is_rejected(monkeypatch, mock_http):
+    monkeypatch.setenv("FISHBOWL_FAST", "jev")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "t")
+    mock_http(lambda r: httpx.Response(200, json={"answers": {
+        "operation": {"choice": "CLICK", "confidence": 0.9}, "click_target": {"choice": "99", "confidence": 0.9}}}))  # fmt: skip
+    with pytest.raises(llm.LLMError, match="not one of the offered options"):
+        await llm.choose("decide", {}, Q)
+
+
+async def test_emulated_choose_uses_enum_schema(monkeypatch, mock_http):
+    monkeypatch.setenv("FISHBOWL_FAST", "ollama")
+    seen = {}
+
+    def handler(r):
+        body = json.loads(r.content)
+        seen["format"] = body["format"]
+        out = {"operation": "CLICK", "operation__confidence": 0.8, "click_target": "7", "click_target__confidence": 0.6}
+        return httpx.Response(200, json={"message": {"content": json.dumps(out)}})
+
+    mock_http(handler)
+    a = await llm.choose("decide", {"step": "next page"}, Q)
+    assert a["click_target"] == {"choice": "7", "confidence": 0.6}
+    assert seen["format"]["properties"]["click_target"]["enum"] == ["3", "7"]
+    assert set(seen["format"]["required"]) == {
+        "operation",
+        "operation__confidence",
+        "click_target",
+        "click_target__confidence",
+    }
+
+
+async def test_decide_refuses_jev(monkeypatch):
+    monkeypatch.setenv("FISHBOWL_FAST", "jev")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "t")
+    with pytest.raises(llm.LLMError, match="multiple-choice"):
+        await llm.decide("x", "s", "u", SCHEMA)

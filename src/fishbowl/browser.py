@@ -52,6 +52,31 @@ class Element:
 _FIELDS = set(Element.__dataclass_fields__)
 
 
+@dataclass
+class Observation:
+    """Everything one fast decision needs, read in a single evaluate."""
+
+    url: str
+    title: str
+    scroll_y: int
+    scroll_max: int
+    elements: list[Element]
+    overlays: list[dict]
+    visible_text: str
+    full_text: str
+    marker: str
+
+    def compact(self, limit: int = 40, text_chars: int = 1500) -> dict:
+        """A small summary for the slow thinker after a handback."""
+        return {
+            "url": self.url,
+            "title": self.title,
+            "elements": element_table([e for e in self.elements if e.inViewport], limit),
+            "visible_text": self.visible_text[:text_chars],
+            "overlays": [o["text"][:120] for o in self.overlays],
+        }
+
+
 def element_table(elements: list[Element], limit: int = 150) -> str:
     return "\n".join(e.line() for e in elements[:limit])
 
@@ -141,6 +166,29 @@ class BrowserController:
         els = [Element(**{k: v for k, v in e.items() if k in _FIELDS}) for e in r.pop("elements")]
         return r, els
 
+    async def observe(self) -> Observation:
+        s = await self.page()
+        r = await s.evaluate(dom_js.OBSERVE)
+        return Observation(
+            url=r["url"],
+            title=r["title"],
+            scroll_y=r["scrollY"],
+            scroll_max=r["scrollMax"],
+            elements=[Element(**{k: v for k, v in e.items() if k in _FIELDS}) for e in r["elements"]],
+            overlays=r["overlays"],
+            visible_text=r["visibleText"],
+            full_text=r["fullText"],
+            marker=r["marker"],
+        )
+
+    async def fresh(self, element_id: int = 0) -> dict:
+        """Has the page, or the target element, changed since the last observe()?"""
+        s = await self.page()
+        return await s.evaluate(dom_js.FRESH % int(element_id))
+
+    def cdp_calls(self) -> int:
+        return sum(s.calls for s in self.browser._sessions.values())
+
     async def overlays(self) -> list[dict]:
         s = await self.page()
         return await s.evaluate(dom_js.OVERLAYS)
@@ -158,12 +206,20 @@ class BrowserController:
         return await s.evaluate(expr)
 
     # ---------- acting ----------
-    async def locate(self, element_id: int) -> dict:
+    async def locate(self, element_id: int, fresh: bool = False) -> dict:
+        """Scroll the element into view and hit-test it. With fresh=True, also refuse (reason "stale")
+        if the page or element changed since the last observe() — in the same round trip."""
         s = await self.page()
-        return await s.evaluate(dom_js.LOCATE % int(element_id))
+        js = dom_js.LOCATE % int(element_id)
+        if fresh:
+            js = (
+                f"(() => {{ const f = {dom_js.FRESH.strip() % int(element_id)}; "
+                f"return f.fresh ? {js.strip()} : {{ ok: false, reason: 'stale', by: f.why }}; }})()"
+            )
+        return await s.evaluate(js)
 
-    async def click(self, element_id: int) -> dict:
-        loc = await self.locate(element_id)
+    async def click(self, element_id: int, fresh: bool = False) -> dict:
+        loc = await self.locate(element_id, fresh)
         if not loc["ok"]:
             return {"ok": False, "reason": loc["reason"], "by": loc.get("by", "")}
         s = await self.page()
@@ -177,8 +233,10 @@ class BrowserController:
         )
         return {"ok": True, "x": x, "y": y}
 
-    async def type(self, element_id: int, text: str, clear: bool = True, submit: bool = False) -> dict:
-        loc = await self.locate(element_id)
+    async def type(
+        self, element_id: int, text: str, clear: bool = True, submit: bool = False, fresh: bool = False
+    ) -> dict:
+        loc = await self.locate(element_id, fresh)
         if not loc["ok"]:
             return {"ok": False, "reason": loc["reason"], "by": loc.get("by", "")}
         if loc.get("select"):
@@ -193,9 +251,15 @@ class BrowserController:
             await self.press("Enter")
         return {"ok": True}
 
-    async def select(self, element_id: int, option: str) -> dict:
+    async def select(self, element_id: int, option: str, fresh: bool = False) -> dict:
         s = await self.page()
-        return await s.evaluate(dom_js.SELECT_OPTION % (int(element_id), json.dumps(option)))
+        js = dom_js.SELECT_OPTION % (int(element_id), json.dumps(option))
+        if fresh:
+            js = (
+                f"(() => {{ const f = {dom_js.FRESH.strip() % int(element_id)}; "
+                f"return f.fresh ? {js.strip()} : {{ ok: false, reason: 'stale', by: f.why }}; }})()"
+            )
+        return await s.evaluate(js)
 
     async def press(self, key: str) -> None:
         s = await self.page()

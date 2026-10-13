@@ -109,16 +109,17 @@ def cmd_doctor(_args) -> int:
         "systemctl restart fishbowl-novnc",
     )
     check(f"workspace {cfg.workspace}", cfg.workspace.exists(), "fishbowl up")
-    try:
-        s = llm.LLMSettings.from_env()
-        print(f"  · decision model: {s.provider} / {s.model}")
-        if s.provider == "ollama":
-            reachable = _get(s.base_url + "/api/tags")
-            check(f"Ollama at {s.base_url}", reachable, "ollama serve && ollama pull " + s.model)
-        else:
-            check(f"{s.provider} API key set", bool(s.api_key), "export the API key")
-    except llm.LLMError as e:
-        check("decision model config", False, str(e))
+    for role, what in (("fast", "executes browser_run, guard, judge"), ("slow", "plans browser_run goals")):
+        try:
+            s = llm.LLMSettings.from_env(role)
+            print(f"  · {role} thinking: {s.provider} / {s.model}  ({what})")
+            if s.provider == "ollama":
+                reachable = _get(s.base_url + "/api/tags")
+                check(f"Ollama at {s.base_url}", reachable, "ollama serve && ollama pull " + s.model)
+            else:
+                check(f"{s.provider} API key set", bool(s.api_key), f"export {llm.KEY_ENV[s.provider]}")
+        except llm.LLMError as e:
+            check(f"{role} model config", False, str(e))
     print("All good." if ok else "Some checks failed.")
     return 0 if ok else 1
 

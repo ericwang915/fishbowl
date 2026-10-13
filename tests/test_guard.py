@@ -97,10 +97,10 @@ def test_non_secrets_pass(text):
 
 
 async def test_assess_uses_model_and_respects_allow():
-    async def model(purpose, system, user, schema):
-        return {"needs_approval": True, "category": "send_message", "reason": "sends a chat"}
+    async def model(purpose, state, questions):
+        return {"category": {"choice": "send_message", "confidence": 0.97}}
 
-    llm.set_override(model)
+    llm.set_choice_override(model)
     v = await guard.assess("click", 'button "Send"')
     assert v.needs_approval and v.source == "model"
     v = await guard.assess("click", 'button "Send"', allowed=["send_message"])

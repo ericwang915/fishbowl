@@ -21,7 +21,7 @@ from . import audit, chat, clipboard, control, desktop, guard, llm
 from .browser import BrowserController, element_table
 from .config import get_config
 from .executor import get_executor
-from .runner import Runner
+from .runner import Runner, run_task
 
 INSTRUCTIONS = """fishbowl is a Linux desktop (Debian, 1280x800, Chromium) in a local VM that a human can watch live.
 Prefer the browser_* tools (fast, exact) over pixel clicks; use `computer` for anything outside the browser.
@@ -444,15 +444,27 @@ async def browser_back() -> dict:
 
 @tool
 async def browser_run(
-    plan: list[dict[str, Any] | str], timeout_s: float = 180, allow: list[str] | None = None, ctx: Context | None = None
+    plan: list[dict[str, Any] | str] | None = None,
+    goal: str | None = None,
+    timeout_s: float = 180,
+    max_replans: int = 2,
+    allow: list[str] | None = None,
+    ctx: Context | None = None,
 ) -> dict:
-    """Execute a multi-step web plan locally with the fast decision model. You write the plan; it acts.
-    plan: [{"goal": "search for 'usb c hub'", "text": "usb c hub"}, {"goal": "open the first result"}, …]
-    Only `text` written in the plan is ever typed. Returns status done | handback | needs_approval | paused |
-    timeout | error, with the reason and a step log. `allow` pre-approves guard categories such as
-    ["send_message"] when the user already agreed."""
+    """Fast + slow thinking for web tasks. The fast model (Jev, or any small model) executes one step at a time
+    on the working tab; the slow model plans.
+    - plan only: you are the slow thinker. plan = [{"goal": "search for the product", "text": "usb c hub"},
+      {"goal": "open the first result"}, …]. Only `text` from the plan is ever typed.
+    - goal only: fishbowl's planner model writes the plan, and replans up to `max_replans` times on handback.
+    - both: start from your plan, and let the planner replan from `goal` if it gets stuck.
+    Returns status done | handback | needs_approval | paused | timeout | error, with the reason, a step log,
+    timing, and on handback a compact `observation` of the page so you can replan without another call.
+    `allow` pre-approves guard categories such as ["send_message"] when the user already agreed."""
+    if not plan and not goal:
+        return {"error": "give a plan, a goal, or both"}
     runner = Runner(get_browser(), approver=lambda m: _ask_human(ctx, m), allow=allow, progress=_progress(ctx))
-    return (await runner.run(plan, timeout_s=timeout_s)).as_dict()
+    res = await run_task(runner, goal=goal, plan=plan or None, max_replans=max_replans, timeout_s=timeout_s)
+    return res.as_dict()
 
 
 # ============================== chatbot testing ==============================

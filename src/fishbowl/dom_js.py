@@ -171,3 +171,77 @@ SELECT_OPTION = r"""
   return { ok: true, selected: opt.text };
 })(%d, %s)
 """
+
+# ---------------------------------------------------------------------------
+# Fast-path observation (design after browser-use/jev-ultrafast, MIT):
+# ONE evaluate returns everything a decision needs: the element table, visible
+# text only, overlays, a page marker for change detection, and freshness guards
+# so an action can be refused if the page changed since the decision.
+
+_FRESH_HELPERS = r"""
+  window.__fbHelpers = window.__fbHelpers || (() => {
+    const clean = s => (s || '').replace(/\s+/g, ' ').trim();
+    const pageKey = () => JSON.stringify([performance.timeOrigin, location.href, Math.round(scrollX), Math.round(scrollY),
+      innerWidth, innerHeight, [...document.querySelectorAll('input,textarea,select')].slice(0, 200)
+        .map(e => [e.dataset.fbId || '', e.value, e.checked, e.selectedIndex, e.disabled])]);
+    const guard = el => {
+      if (!el || !el.isConnected) return null;
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return null;
+      const scope = el.closest('form,dialog,[role=dialog],article,li,tr,[role=row]') || el.parentElement;
+      return JSON.stringify([el.tagName, el.getAttribute('role') || '', clean(el.getAttribute('aria-label') || el.innerText || el.value || el.placeholder).slice(0, 80),
+        el.value ?? null, el.checked ?? null, el.selectedIndex ?? null, clean(scope ? scope.innerText : '').slice(0, 120)]);
+    };
+    return { pageKey, guard };
+  })();
+"""
+
+OBSERVE = (
+    r"""
+(() => {
+"""
+    + _FRESH_HELPERS
+    + r"""
+  const H = window.__fbHelpers;
+  const base = """
+    + ELEMENTS.strip()
+    + r""";
+  const overlays = """
+    + OVERLAYS.strip()
+    + r""";
+  // Visible text only: text nodes whose box intersects the viewport.
+  const parts = []; let total = 0;
+  const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode() && total < 4000) {
+    const n = walker.currentNode, t = n.nodeValue.replace(/\s+/g, ' ').trim();
+    if (!t || !n.parentElement) continue;
+    const r = n.parentElement.getBoundingClientRect();
+    if (r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth || r.width === 0) continue;
+    const cs = getComputedStyle(n.parentElement);
+    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    if (parts[parts.length - 1] !== t) { parts.push(t); total += t.length + 1; }
+  }
+  const visibleText = parts.join('\n');
+  const fullText = (document.body ? document.body.innerText : '').slice(0, 20000);
+  const guards = {};
+  for (const e of base.elements) guards[e.id] = H.guard(document.querySelector(`[data-fb-id="${e.id}"]`));
+  const pageKey = H.pageKey();
+  window.__fbObs = { pageKey, guards };
+  let h = 0; const s = JSON.stringify([location.href, document.title, Math.round(scrollY), visibleText,
+    base.elements.map(e => [e.id, e.name, e.value, e.checked, e.expanded])]);
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return { ...base, overlays, visibleText, fullText, marker: String(h) };
+})()
+"""
+)
+
+# Is the page (and, optionally, the target element) still what the decision saw?
+FRESH = r"""
+((id) => {
+  const H = window.__fbHelpers, obs = window.__fbObs;
+  if (!H || !obs) return { fresh: false, why: 'no observation' };
+  if (H.pageKey() !== obs.pageKey) return { fresh: false, why: 'page changed' };
+  if (id && H.guard(document.querySelector(`[data-fb-id="${id}"]`)) !== obs.guards[id]) return { fresh: false, why: 'target changed' };
+  return { fresh: true };
+})(%d)
+"""

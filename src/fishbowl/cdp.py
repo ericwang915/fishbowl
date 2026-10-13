@@ -20,6 +20,7 @@ class Session:
         self.ws = ws
         self.target_id = target_id
         self._ids = itertools.count(1)
+        self.calls = 0  # CDP round trips on this session (for speed stats)
         self._pending: dict[int, asyncio.Future] = {}
         self._listeners: list[tuple[str, asyncio.Queue]] = []
         self._reader = asyncio.create_task(self._read())
@@ -59,6 +60,7 @@ class Session:
         if self.closed:
             raise CDPError("connection closed")
         i = next(self._ids)
+        self.calls += 1
         fut = asyncio.get_running_loop().create_future()
         self._pending[i] = fut
         await self.ws.send(json.dumps({"id": i, "method": method, "params": params or {}}))

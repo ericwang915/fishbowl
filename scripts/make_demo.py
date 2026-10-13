@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 from fishbowl import audit, config, llm  # noqa: E402
 from fishbowl.browser import BrowserController  # noqa: E402
 from fishbowl.runner import Runner  # noqa: E402
-from tests.fake_model import fake_llm  # noqa: E402
+from tests.fake_model import use_fake  # noqa: E402
 
 W, H = 1000, 640
 SHOT_W, SHOT_H = 880, 563
@@ -101,14 +101,14 @@ def serve(directory):
 
 def describe(event, args):
     if event == "browser_run.decide":
-        a, e = args["action"], args["element"]
-        if a == "done":
-            return ("done", "step already satisfied", "#3fb950")
-        target = f" → [{e}]" if e else ""
-        return (f"step {args['step']}", f"{a}{target}  · {args['reason']}", "#e6edf3")
+        op, t = args["op"], args["target"]
+        if op == "DONE":
+            return (f"step {args['step']}", "DONE · verified", "#3fb950")
+        target = f" [{t}]" if t else ""
+        return (f"step {args['step']}", f"{op}{target}  p={args['confidence']:.2f}", "#e6edf3")
     if event == "guard":
-        name = args["target"].split('"')[1].split(" —")[0]
-        return ("guard", f"⚠ '{name}' is irreversible", "#d29922")
+        name = args["target"].split("] ", 1)[1].split(" ", 1)[1].split(" —")[0]
+        return ("guard", f"'{name}' is irreversible", "#d29922")
     if event == "browser_run.end":
         color = "#3fb950" if args["status"] == "done" else "#d29922"
         if args["status"] == "needs_approval":
@@ -144,7 +144,7 @@ def compose(shot: Image.Image, lines, status):
     d.text((x + 134, y + 8), "Pause", font=font(13), fill="#111")
     # decision log
     px, py = SHOT_W + 18, 70
-    d.text((px, py), "plan (written by Claude)", font=font(13), fill="#8b949e")
+    d.text((px, py), "slow thinking · plan by Claude", font=font(13), fill="#8b949e")
     py += 22
     for i, s in enumerate(PLAN, 1):
         goal = s["goal"].split(" expect")[0]
@@ -158,7 +158,7 @@ def compose(shot: Image.Image, lines, status):
     py += 14
     d.line((px, py, SHOT_W + PANEL_W - 18, py), fill="#30363d")
     py += 12
-    d.text((px, py), "local decision model", font=font(13), fill="#8b949e")
+    d.text((px, py), "fast thinking · one choice per action", font=font(13), fill="#8b949e")
     py += 24
     for tag, text, color in lines[-12:]:
         d.text((px, py), tag, font=font(13, True), fill="#79c0ff")
@@ -171,7 +171,7 @@ def compose(shot: Image.Image, lines, status):
 async def main():
     tmp = Path(tempfile.mkdtemp())
     config.set_config(config.Config(home=tmp / "vc", executor="local", auto_open_viewer=False))
-    llm.set_override(fake_llm)
+    use_fake(llm)
     proc, cdp = start_chrome()
     base = serve(ROOT / "docs" / "demo")
     lines: list = []
