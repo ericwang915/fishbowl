@@ -1,0 +1,24 @@
+# fishbowl-jev-ultrafast
+
+> A sandboxed Linux desktop (Lima VM: Debian 12, 1280x800, Chromium, shell) on a Mac, exposed to AI agents as an MCP
+> server (stdio) with 25 tools. A human watches live in the browser (noVNC), can pause, and takes over for logins via
+> `handoff`. Optional fast mode: a big model plans, Jev (TypeSafe) executes each browser action as multiple-choice
+> questions. Command: `fishbowl`. Python package source: https://github.com/ericwang915/fishbowl
+
+## How an agent should use it
+
+- Prefer `browser_elements` + `browser_click` / `browser_type` / `browser_select` over pixel clicks; use `computer` only outside the browser.
+- For multi-step web tasks, call `browser_run` with a `plan` ([{"goal": ..., "text": ...}]). Only `text` from the plan is typed. On `handback`, read `reason`, `log` and `observation`, fix the plan, continue.
+- If `browser_run` returns `fast_mode_off`, there is no Jev key: drive step by step with the `browser_*` tools.
+- Logins, captchas, 2FA: call `handoff(reason)` and wait. Never ask for passwords in chat.
+- `needs_approval`: ask the user in plain words; retry with `approved=true` only after an explicit yes.
+- `paused`: stop and wait. Files for the user go in `/workspace` (= `~/vc/workspace` on the Mac).
+
+## Docs
+
+- [README](https://github.com/ericwang915/fishbowl/blob/main/README.md): overview, quick start, configuration
+- [Tool reference](https://github.com/ericwang915/fishbowl/blob/main/docs/tools.md): all 25 tools and parameters
+- [Fast and slow thinking](https://github.com/ericwang915/fishbowl/blob/main/docs/fast-slow.md): browser_run design
+- [Security model](https://github.com/ericwang915/fishbowl/blob/main/docs/security.md): boundaries and limits
+- [MCP clients](https://github.com/ericwang915/fishbowl/blob/main/docs/clients.md): Claude Code, Codex, Claude Desktop, Cursor
+- [Agent house rules](https://github.com/ericwang915/fishbowl/blob/main/examples/AGENTS.md)
