@@ -68,7 +68,7 @@
 
 | macOS（Apple Silicon 或 Intel） | Windows 10/11（x64 或 ARM） | Linux |
 |---|---|---|
-| `brew install lima`<br>Intel Mac 另需：`brew install qemu` | 在管理员 PowerShell 中运行 `wsl --install` 并重启<br>（需要 WSL 2.4.4+，用 `wsl --update` 升级） | [Lima](https://lima-vm.io/docs/installation/) + QEMU/KVM |
+| `brew install lima`<br>Intel Mac 另需：`brew install qemu` | 不用装：`fishbowl up` 会自动安装或升级 WSL<br>（第一次需要点一次管理员授权，然后重启） | [Lima](https://lima-vm.io/docs/installation/) + QEMU/KVM |
 
 ```bash
 pip install git+https://github.com/ericwang915/fishbowl
@@ -446,6 +446,10 @@ macOS（Apple Silicon 或 Intel）、Windows 10/11（x64 的 Intel/AMD 处理器
 
 WSL2 是 Windows 自带的真实 Linux 虚拟机。它默认能看到所有磁盘、能调用 Windows 程序，所以 fishbowl 在 `/etc/wsl.conf` 里把这两项都关掉，
 只挂载 `~\vc\workspace`，并用非特权用户运行桌面。
+
+如果还没装 WSL，`fishbowl up` 会请求一次管理员授权、自动安装，然后提示你重启；重启后再运行一次 `fishbowl up` 即可。
+WSL 版本太旧会自动升级。需要 Windows 10 2004 及以上或 Windows 11，并在 BIOS 中开启 CPU 虚拟化（Intel VT-x / AMD-V），
+`fishbowl doctor` 会检查这两项。
 </details>
 
 <details><summary><b>能不用虚拟机吗？</b></summary>

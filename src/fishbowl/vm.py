@@ -239,11 +239,103 @@ def parse_wsl_list(text: str) -> dict[str, str]:
     return out
 
 
+MIN_WSL = (2, 4, 4)  # `wsl --install <distro> --name <name>` arrived in 2.4.4
+NEEDS_REBOOT = 3
+
+VIRT_PS = (
+    "$p = Get-CimInstance Win32_Processor | Select-Object -First 1; "
+    "$c = Get-CimInstance Win32_ComputerSystem; "
+    '"$($p.VirtualizationFirmwareEnabled) $($c.HypervisorPresent)"'
+)
+
+
+def parse_wsl_version(text: str) -> tuple[int, int, int] | None:
+    """First version number in `wsl --version` (works for any UI language, e.g. 'WSL 版本： 2.4.4.0')."""
+    import re
+
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", text)
+    return tuple(int(g) for g in m.groups()) if m else None
+
+
+def _fmt(v) -> str:
+    return ".".join(map(str, v)) if v else "unknown"
+
+
 class WSLBackend(Backend):
     name = "wsl"
 
-    def __init__(self, runner=None):
+    def __init__(self, runner=None, ps=None):
         self.runner = runner or self._run
+        self.ps = ps or self._powershell
+
+    @staticmethod
+    def _powershell(script: str, timeout: float = 1800) -> tuple[int, str]:
+        p = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return p.returncode, p.stdout + p.stderr
+
+    # ---- WSL itself -------------------------------------------------------------------
+    def wsl_version(self) -> tuple[int, int, int] | None:
+        code, out = self.runner(["--version"])
+        return parse_wsl_version(out) if code == 0 else None
+
+    def wsl_installed(self) -> bool:
+        if self.wsl_version():
+            return True
+        return self.runner(["--status"])[0] == 0  # old inbox WSL has no --version
+
+    def virtualization(self) -> bool | None:
+        """CPU virtualization usable? (firmware switch on, or a hypervisor already running). None = unknown."""
+        code, out = self.ps(VIRT_PS)
+        words = out.split()
+        if code != 0 or len(words) < 2:
+            return None
+        return "True" in words[:2]
+
+    def _elevated(self, args: list[str]) -> tuple[int, str]:
+        """Run wsl.exe with admin rights: Windows shows its UAC prompt."""
+        arglist = ",".join(f"'{a}'" for a in args)
+        return self.ps(
+            f"$p = Start-Process wsl.exe -ArgumentList {arglist} -Verb RunAs -Wait -PassThru; exit $p.ExitCode"
+        )
+
+    def ensure_wsl(self) -> int | None:
+        """Install or update WSL as needed. Returns None when ready, else an exit code."""
+        if self.runner is self._run and not shutil.which("wsl.exe"):
+            print(
+                "This Windows has no WSL. fishbowl needs Windows 10 2004 (build 19041) or Windows 11.", file=sys.stderr
+            )
+            return 1
+        if not self.wsl_installed():
+            if self.virtualization() is False:
+                print(
+                    "CPU virtualization is off. Turn on Intel VT-x / AMD-V (often 'SVM') in your BIOS/UEFI settings, "
+                    "then run fishbowl up again.",
+                    file=sys.stderr,
+                )
+                return 1
+            print("WSL is not installed. Approve the Windows prompt to install it (needs admin rights)…")
+            code, out = self._elevated(["--install", "--no-distribution"])
+            if code != 0:
+                print(out.strip(), file=sys.stderr)
+                print("Install it yourself: in an admin PowerShell run  wsl --install  then restart.", file=sys.stderr)
+                return 1
+            print("WSL is installed. Restart Windows, then run  fishbowl up  again.")
+            return NEEDS_REBOOT
+        v = self.wsl_version()
+        if v is None or v < MIN_WSL:
+            print(f"Updating WSL ({_fmt(v)} → {_fmt(MIN_WSL)} or newer)…")
+            if self.runner(["--update"])[0] != 0:
+                self._elevated(["--update"])
+            v = self.wsl_version()
+            if v is None or v < MIN_WSL:
+                print("Could not update WSL. In an admin PowerShell run:  wsl --update", file=sys.stderr)
+                return 1
+        return None
 
     @staticmethod
     def _run(args: list[str], stdin: str | None = None, timeout: float = 1800) -> tuple[int, str]:
@@ -275,9 +367,8 @@ class WSLBackend(Backend):
         cfg = get_config()
         cfg.ensure_dirs()
         name = cfg.vm_name
-        if not shutil.which("wsl.exe") and self.runner is self._run:
-            print("WSL is not installed. In an admin PowerShell run:  wsl --install   then reboot.", file=sys.stderr)
-            return 1
+        if (rc := self.ensure_wsl()) is not None:
+            return rc
         if self.status() == "absent":
             print(f"Creating WSL distro '{name}' on {hostos.describe()} (downloads Debian, ~3-5 min)…")
             code, out = self.runner(["--install", "Debian", "--name", name, "--no-launch"])
@@ -318,10 +409,16 @@ class WSLBackend(Backend):
             self._keepalive()
 
     def checks(self):
-        return [
-            ("WSL installed", bool(shutil.which("wsl.exe")), "wsl --install (admin PowerShell), then reboot"),
-            (f"WSL distro '{get_config().vm_name}' running", self.status() == "Running", "fishbowl up"),
-        ]
+        installed = self.wsl_installed()
+        out = [("WSL installed", installed, "fishbowl up (installs it), or: wsl --install in an admin PowerShell")]
+        if installed:
+            v = self.wsl_version()
+            out.append((f"WSL version {_fmt(v)} (need {_fmt(MIN_WSL)}+)", bool(v and v >= MIN_WSL), "wsl --update"))
+        virt = self.virtualization()
+        if virt is not None:
+            out.append(("CPU virtualization enabled", virt, "turn on Intel VT-x / AMD-V in BIOS/UEFI"))
+        out.append((f"WSL distro '{get_config().vm_name}' running", self.status() == "Running", "fishbowl up"))
+        return out
 
 
 def get_backend() -> Backend:

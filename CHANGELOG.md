@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Platforms
+- On Windows, `fishbowl up` installs WSL when it's missing (one UAC prompt, then a restart), updates WSL older than 2.4.4, and stops with a clear message when CPU virtualization is off in the BIOS. `fishbowl doctor` checks the WSL version and virtualization.
 - **Windows 10/11 (x64 and ARM)** through a WSL2 backend: `fishbowl up` creates a Debian distro, turns off drive automount and Windows interop, mounts only the workspace, enables systemd, and installs the same desktop. The host clipboard works via the Win32 API.
 - **macOS on Apple Silicon and Intel**, and **Linux**, through Lima. QEMU guests (Intel Macs, Linux) use sshfs mounts.
 - One set of provisioning scripts for both backends. `fishbowl doctor` and `status` show the detected host and backend. `fishbowl install` knows Claude Desktop's config path on each OS.

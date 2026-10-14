@@ -149,11 +149,22 @@ def test_wsl_list_parsing_utf16():
 
 
 class FakeWSL:
-    def __init__(self, fail_install=False):
-        self.calls, self.distros, self.fail_install = [], {}, fail_install
+    """wsl.exe + powershell.exe stand-ins. `installed=False` mimics a PC where WSL was never set up."""
+
+    def __init__(self, fail_install=False, installed=True, version="2.5.10.0", virt="True True", elevate_ok=True):
+        self.calls, self.ps_calls, self.distros = [], [], {}
+        self.fail_install, self.installed, self.version, self.virt = fail_install, installed, version, virt
+        self.elevate_ok = elevate_ok
 
     def __call__(self, args, stdin=None, timeout=0):
         self.calls.append((args, stdin))
+        if args == ["--version"]:
+            return (0, f"WSL version: {self.version}\nKernel version: 6.6.87.2-1\n") if self.installed else (1, "")
+        if args == ["--status"]:
+            return (0, "Default Version: 2") if self.installed else (1, "WSL is not installed")
+        if args == ["--update"]:
+            self.version = "2.6.1.0"
+            return 0, ""
         if args[:2] == ["--list", "--verbose"]:
             body = "".join(f"  {n}  {s}  2\n" for n, s in self.distros.items())
             return 0, "  NAME  STATE  VERSION\n" + body
@@ -163,26 +174,98 @@ class FakeWSL:
             self.distros["fishbowl"] = "Stopped"
         return 0, ""
 
+    def ps(self, script, timeout=0):
+        self.ps_calls.append(script)
+        if "Win32_Processor" in script:
+            return 0, self.virt
+        if "RunAs" in script:
+            return (0, "") if self.elevate_ok else (1, "The operation was canceled by the user.")
+        return 0, ""
+
+
+def backend(fake):
+    return vm.WSLBackend(runner=fake, ps=fake.ps)
+
 
 def test_wsl_up_sequence(fishbowl_home):
     fake = FakeWSL()
-    assert vm.WSLBackend(runner=fake).up() == 0
+    assert backend(fake).up() == 0
     steps = [c[0] for c in fake.calls]
-    assert steps[1] == ["--install", "Debian", "--name", "fishbowl", "--no-launch"]
+    assert ["--install", "Debian", "--name", "fishbowl", "--no-launch"] in steps
     setup, provision = [c for c in fake.calls if c[0][-2:] == ["bash", "-s"]]
     assert "[automount]" in setup[1] and str(fishbowl_home.workspace.name) in setup[1]
     assert steps.index(["--terminate", "fishbowl"]) < fake.calls.index(provision)  # wsl.conf applied first
     assert "fishbowl-chromium" in provision[1]
+    assert not any("RunAs" in p for p in fake.ps_calls)  # nothing to install: no admin prompt
+
+
+def test_wsl_missing_is_installed_with_one_admin_prompt(fishbowl_home, capsys):
+    fake = FakeWSL(installed=False)
+    assert backend(fake).up() == vm.NEEDS_REBOOT
+    elevated = [p for p in fake.ps_calls if "RunAs" in p]
+    assert len(elevated) == 1 and "'--install','--no-distribution'" in elevated[0]
+    assert "Restart Windows" in capsys.readouterr().out
+    assert not any(c[0][0] == "--install" for c in fake.calls)  # no distro yet: that's after the reboot
+
+
+def test_wsl_install_needs_virtualization(fishbowl_home, capsys):
+    fake = FakeWSL(installed=False, virt="False False")
+    assert backend(fake).up() == 1
+    assert "BIOS" in capsys.readouterr().err and not any("RunAs" in p for p in fake.ps_calls)
+
+
+def test_wsl_install_declined(fishbowl_home, capsys):
+    fake = FakeWSL(installed=False, elevate_ok=False)
+    assert backend(fake).up() == 1
+    assert "wsl --install" in capsys.readouterr().err
+
+
+def test_old_wsl_is_updated_first(fishbowl_home, capsys):
+    fake = FakeWSL(version="2.3.26.0")
+    assert backend(fake).up() == 0
+    steps = [c[0] for c in fake.calls]
+    assert steps.index(["--update"]) < steps.index(["--install", "Debian", "--name", "fishbowl", "--no-launch"])
+    assert "2.3.26 → 2.4.4" in capsys.readouterr().out
+
+
+def test_wsl_update_that_fails(fishbowl_home, capsys, monkeypatch):
+    fake = FakeWSL(version="2.0.9.0")
+    orig = FakeWSL.__call__
+
+    def stuck(self, args, stdin=None, timeout=0):
+        if args == ["--update"]:
+            self.calls.append((args, stdin))
+            return 1, "update failed"
+        return orig(self, args, stdin, timeout)
+
+    monkeypatch.setattr(FakeWSL, "__call__", stuck)
+    assert backend(fake).up() == 1
+    assert any("'--update'" in p for p in fake.ps_calls)  # retried with admin rights
+    assert "wsl --update" in capsys.readouterr().err
+
+
+def test_wsl_doctor_checks(fishbowl_home):
+    names = [c[0] for c in backend(FakeWSL(version="2.3.26.0")).checks()]
+    assert names[0] == "WSL installed" and names[1] == "WSL version 2.3.26 (need 2.4.4+)"
+    assert "CPU virtualization enabled" in names
+    checks = dict((n, ok) for n, ok, _ in backend(FakeWSL(installed=False, virt="False False")).checks())
+    assert checks["WSL installed"] is False and checks["CPU virtualization enabled"] is False
+
+
+def test_wsl_version_parsing_any_language():
+    assert vm.parse_wsl_version("WSL version: 2.4.4.0\nKernel version: 5.15.167.4-1") == (2, 4, 4)
+    assert vm.parse_wsl_version("WSL 版本： 2.5.10.0\n内核版本： 6.6.87.2-1") == (2, 5, 10)
+    assert vm.parse_wsl_version("") is None
 
 
 def test_wsl_up_explains_old_wsl(fishbowl_home, capsys):
-    assert vm.WSLBackend(runner=FakeWSL(fail_install=True)).up() == 1
+    assert backend(FakeWSL(fail_install=True)).up() == 1
     assert "wsl --update" in capsys.readouterr().err
 
 
 def test_wsl_down_and_destroy(fishbowl_home):
     fake = FakeWSL()
-    b = vm.WSLBackend(runner=fake)
+    b = backend(fake)
     b.down()
     b.destroy()
     assert [c[0] for c in fake.calls] == [["--terminate", "fishbowl"], ["--unregister", "fishbowl"]]

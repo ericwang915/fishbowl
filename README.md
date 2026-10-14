@@ -68,7 +68,7 @@ A sandboxed Linux desktop on your Mac or Windows PC that Claude Code, Codex, Cla
 
 | macOS (Apple Silicon or Intel) | Windows 10/11 (x64 or ARM) | Linux |
 |---|---|---|
-| `brew install lima`<br>Intel Macs also: `brew install qemu` | `wsl --install` in an admin PowerShell, reboot<br>(WSL 2.4.4+; update with `wsl --update`) | [Lima](https://lima-vm.io/docs/installation/) + QEMU/KVM |
+| `brew install lima`<br>Intel Macs also: `brew install qemu` | Nothing: `fishbowl up` installs or updates WSL for you<br>(one admin prompt, then a restart the first time) | [Lima](https://lima-vm.io/docs/installation/) + QEMU/KVM |
 
 ```bash
 pip install git+https://github.com/ericwang915/fishbowl
@@ -458,6 +458,10 @@ did not boot the VM in our testing.
 
 WSL2 is a real Linux VM that ships with Windows. By default it can see every drive and start Windows programs, so
 fishbowl turns both off in `/etc/wsl.conf`, mounts only `~\vc\workspace`, and runs the desktop as an unprivileged user.
+
+If WSL isn't installed, `fishbowl up` asks Windows for admin rights once, installs it, and tells you to restart; run
+`fishbowl up` again afterwards. Older WSL versions are updated automatically. It needs Windows 10 2004+ or Windows 11,
+and CPU virtualization (Intel VT-x / AMD-V) turned on in the BIOS; `fishbowl doctor` checks both.
 </details>
 
 <details><summary><b>Can I skip the VM?</b></summary>
