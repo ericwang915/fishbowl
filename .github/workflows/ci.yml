@@ -79,7 +79,7 @@ jobs:
         env:
           FISHBOWL_VM_LIVE: "1"
           FISHBOWL_ARTIFACTS: artifacts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: vm-screenshots
